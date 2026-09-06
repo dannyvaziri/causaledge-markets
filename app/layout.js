@@ -1,9 +1,8 @@
 import './globals.css';
-import './onboarding.css';
 
 export const metadata = {
-  title: 'SignalForge AI',
-  description: 'AI-assisted market intelligence and paper trading dashboard',
+  title: 'SignalForge | $100 Challenge',
+  description: 'Personal AI market-monitoring and autonomous paper-trading experiment with deterministic risk controls.',
 };
 
 export default function RootLayout({ children }) {
