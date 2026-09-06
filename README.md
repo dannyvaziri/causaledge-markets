@@ -1,141 +1,139 @@
-# SignalForge AI
+# SignalForge — $100 Challenge
 
-SignalForge AI is a safe-by-default market intelligence and paper-trading dashboard. It can load Alpaca market news, generate structured AI research, apply deterministic risk controls, and submit **paper orders only**.
+SignalForge is a personal autonomous **paper-trading** experiment designed to test whether a news + AI + deterministic-risk strategy can grow a $100 account toward $1,000 without giving an AI model unrestricted control.
 
-> Research and paper trading only. Not financial advice. Live trading is disabled. Simulated results do not guarantee future performance.
+> This repository intentionally contains no live Alpaca trading endpoint. It can autonomously submit Alpaca **paper** orders only.
 
-## Safety design
-
-SignalForge deliberately separates AI research from execution:
+## Flow
 
 ```text
-market news → AI research memo → proposed BUY / SELL / HOLD
-                               ↓
-                    deterministic risk engine
-                               ↓
-                   Alpaca PAPER endpoint only
+fresh Alpaca news
+      ↓
+AI catalyst classifier
+      ↓
+market confirmation
+      ↓
+deterministic risk engine
+      ↓
+Alpaca PAPER order
+      ↓
+automatic stop/profit exits
 ```
 
-AI cannot choose position size, change risk limits, disable the kill switch, short stocks, or choose a live broker endpoint.
+## Starting guardrails
 
-The paper-order route is hard-coded to:
+At approximately $100 equity:
+
+- Starting challenge: $100
+- Target scoreboard: $1,000
+- Maximum new position: 25% of equity ($25 at $100)
+- Maximum open positions: 2
+- Daily loss stop: 3% / minimum $3
+- Protective position exit: -3%
+- Profit exit: +6%
+- Minimum AI confidence: 90%
+- Minimum catalyst impact: 8/10
+- Fresh-news threshold: 5 minutes
+- Maximum quote spread: 0.5%
+- Long-only
+- No margin logic
+- No options
+- No shorts
+- Leveraged/inverse/high-volatility ETFs blocked
+- Averaging into an existing position blocked
+- Kill switch overrides new entries
+
+Position sizing scales with account equity while remaining capped at $250 per new order.
+
+## Personal dashboard
+
+The home page is a private command center showing:
+
+- challenge equity and $100 → $1,000 progress
+- daily P&L and cash
+- current paper positions
+- risk configuration
+- autonomous engine status
+- decision journal
+- Run cycle now
+- Pause / Resume
+- Close all paper positions
+
+The dashboard requires `DASHBOARD_TOKEN`, stored in the Hostinger environment rather than source control. The browser stores the token locally after you enter it.
+
+## Autonomous engine
+
+`POST /api/engine` runs one cycle. A Hostinger cron job can call it repeatedly so the browser does not have to stay open.
+
+Recommended cron request:
+
+```bash
+curl -fsS -X POST "https://YOUR-SITE/api/engine?action=run&secret=YOUR_ENGINE_SECRET" -H "Content-Type: application/json" -d '{}'
+```
+
+Run every 5 minutes during market hours for the initial experiment. The endpoint also accepts dashboard actions:
+
+```json
+{ "action": "run" }
+{ "action": "pause" }
+{ "action": "resume" }
+{ "action": "close-all" }
+```
+
+The in-process journal and duplicate cache reset when the Node process restarts. Persistent database-backed journaling should be added before treating this as production infrastructure.
+
+## Environment
+
+Copy `.env.example` locally or configure the same variables in Hostinger:
 
 ```text
-https://paper-api.alpaca.markets
+DASHBOARD_TOKEN=<long random value>
+ENGINE_SECRET=<different long random value>
+
+CHALLENGE_START=100
+CHALLENGE_TARGET=1000
+
+PAPER_EXECUTION_ENABLED=false
+AUTO_EXECUTION_ENABLED=false
+TRADING_KILL_SWITCH=false
+
+ALPACA_API_KEY=<paper key>
+ALPACA_API_SECRET=<paper secret>
+OPENAI_API_KEY=<server-side key>
 ```
 
-There is no live Alpaca trading URL in this project.
+Never commit real credentials.
 
-Default limits:
+### Safe rollout
 
-- Maximum order notional: $2,500
-- Maximum projected single-stock exposure: 10% of equity
-- Maximum daily drawdown: 2%
-- Maximum open positions: 8
-- Auto-paper minimum AI confidence: 85%
-- Auto-paper minimum impact score: 8/10
-- Stale signal threshold: 10 minutes
-- Long-only; short selling blocked
-- Leveraged/inverse ETFs blocked by the risk engine
-- Duplicate intelligence/order attempts blocked in the running process
-- Paper execution defaults OFF
-- Auto paper execution defaults OFF
+1. Reset or create a dedicated Alpaca paper account with a $100 starting balance.
+2. Deploy the app with both execution flags set to `false`.
+3. Add Alpaca paper and OpenAI credentials and verify the dashboard.
+4. Set `PAPER_EXECUTION_ENABLED=true` and manually run several cycles.
+5. Review the journal and broker orders.
+6. Only then set `AUTO_EXECUTION_ENABLED=true` and enable the 5-minute cron.
 
-## Features
+`TRADING_KILL_SWITCH=true` blocks new autonomous entries. The dashboard close-all action remains available for paper positions.
 
-- Responsive finance dashboard
-- Demo mode requiring no credentials
-- Alpaca market-news REST feed
-- OpenAI structured market research
-- BUY / SELL / HOLD research output
-- Deterministic server-side risk engine
-- Alpaca paper-only order gateway
-- Kill switch and execution locks
-- Demo portfolio, decisions and journal views
-- Health/configuration endpoint
-- Automated GitHub tests and production build verification
+## Development
 
-## Run locally
-
-Requires Node.js 20+.
+Requires Node 20+.
 
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-Without credentials the app automatically runs in demo mode.
-
-## Environment variables
-
-```bash
-PAPER_EXECUTION_ENABLED=false
-AUTO_EXECUTION_ENABLED=false
-TRADING_KILL_SWITCH=false
-
-ALPACA_API_KEY=
-ALPACA_API_SECRET=
-
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.4-mini
-```
-
-Never commit `.env` or `.env.local`.
-
-### Recommended rollout
-
-1. Leave `PAPER_EXECUTION_ENABLED=false` and review the dashboard/news/AI outputs.
-2. Connect Alpaca **paper** API credentials.
-3. Keep automatic execution off and test manual paper intents.
-4. Review rejected signals and tune deterministic thresholds.
-5. Only after paper validation, optionally set `AUTO_EXECUTION_ENABLED=true` for paper orders.
-
-Live trading should remain a separate future project with additional controls, reconciliation, persistent audit infrastructure and independent review.
-
-## API routes
-
-- `GET /api/health` — mode and safety configuration without secrets.
-- `GET /api/news` — latest Alpaca market news when paper/data credentials exist.
-- `POST /api/analyze` — structured AI research for supplied ticker/news context; demo fallback when OpenAI is not configured.
-- `POST /api/paper-order` — deterministic risk check followed by Alpaca paper order submission only when execution is explicitly enabled.
-
-Example manual paper BUY intent:
-
-```json
-{
-  "symbol": "NVDA",
-  "side": "BUY",
-  "notional": 500,
-  "source": "manual",
-  "confidence": 92,
-  "impact": 8.9,
-  "ageMinutes": 2,
-  "intelligenceId": "news-123"
-}
-```
-
-## Verify
-
-```bash
 npm test
 npm run build
+npm start
 ```
 
-GitHub Actions runs both commands on pushes to `main`.
+GitHub Actions verifies tests and a production build on pushes to `main`.
 
-## Hostinger deployment
+## Hostinger
 
-This is a Next.js Node application configured with standalone output. Use Node 20+ or 22, install dependencies with `npm install`, build with `npm run build`, and start with `npm start`.
+The project is a Next.js Node application configured for Hostinger Node.js hosting. Deploy source code without `node_modules`, install dependencies, build with `npm run build`, and start with `npm start`.
 
-Set secrets in the hosting environment, **not GitHub**. Start the hosted deployment with:
+Target deployment for this project:
 
 ```text
-PAPER_EXECUTION_ENABLED=false
-AUTO_EXECUTION_ENABLED=false
-TRADING_KILL_SWITCH=false
+https://yellowgreen-coyote-640624.hostingersite.com/
 ```
-
-Then verify `/api/health` before adding paper credentials.
