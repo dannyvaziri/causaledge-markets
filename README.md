@@ -59,7 +59,7 @@ The home page is a private command center showing:
 - Pause / Resume
 - Close all paper positions
 
-The dashboard requires `DASHBOARD_TOKEN`, stored in the Hostinger environment rather than source control. The browser stores the token locally after you enter it.
+The dashboard supports Google sign-in with a secure, HttpOnly session cookie. Set `APP_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ALLOWED_GOOGLE_EMAILS` (a comma-separated owner allowlist). Only verified Google accounts on that list can access the personal dashboard. An optional `DASHBOARD_TOKEN` remains available for operator access. Broker, news, and analysis routes require authentication.
 
 ## Autonomous engine
 
@@ -68,7 +68,7 @@ The dashboard requires `DASHBOARD_TOKEN`, stored in the Hostinger environment ra
 Recommended cron request:
 
 ```bash
-curl -fsS -X POST "https://YOUR-SITE/api/engine?action=run&secret=YOUR_ENGINE_SECRET" -H "Content-Type: application/json" -d '{}'
+curl -fsS -X POST "https://YOUR-SITE/api/engine?action=run" -H "x-engine-secret: $CRON_SECRET" -H "Content-Type: application/json" -d '{}'
 ```
 
 Run every 5 minutes during market hours for the initial experiment. The endpoint also accepts dashboard actions:
@@ -137,3 +137,7 @@ Target deployment for this project:
 ```text
 https://yellowgreen-coyote-640624.hostingersite.com/
 ```
+
+## Credential separation
+
+`ALPACA_API_KEY` and `ALPACA_API_SECRET` are exclusively PAPER credentials, used only against the fixed paper API and market-data endpoints. `ALPACA_LIVE_API_KEY` and `ALPACA_LIVE_API_SECRET` are reserved server-side storage names; no execution code reads them. `LIVE_TRADING_ENABLED` must remain `false`. Keep `PAPER_EXECUTION_ENABLED=false`, `AUTO_EXECUTION_ENABLED=false`, and `TRADING_KILL_SWITCH=true` during setup. `CRON_SECRET` replaces the older `ENGINE_SECRET` name (the latter remains a fallback). Cron credentials are accepted only in a request header to avoid leaking them through URLs.

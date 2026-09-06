@@ -1,3 +1,4 @@
+import { isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
 import { evaluateRisk } from '../../../lib/risk.js';
 
 export const dynamic = 'force-dynamic';
@@ -57,18 +58,10 @@ function limits(equity) {
   };
 }
 
-function isDashboardAuthorized(request) {
-  const configured = process.env.DASHBOARD_TOKEN || '';
-  if (!configured) return false;
-  return request.headers.get('x-sf-token') === configured;
-}
-
 function isEngineAuthorized(request) {
   if (isDashboardAuthorized(request)) return true;
-  const configured = process.env.ENGINE_SECRET || '';
-  if (!configured) return false;
-  const url = new URL(request.url);
-  return request.headers.get('x-engine-secret') === configured || url.searchParams.get('secret') === configured;
+  const configured = process.env.CRON_SECRET || process.env.ENGINE_SECRET || '';
+  return matchesSecret(request.headers.get('x-engine-secret'), configured);
 }
 
 async function accountSnapshot() {
@@ -267,7 +260,7 @@ async function runCycle() {
 }
 
 export async function GET(request) {
-  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Invalid dashboard access token.' }, { status: 401 });
+  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in to access your dashboard.' }, { status: 401 });
   try { return Response.json(statusPayload(await accountSnapshot())); }
   catch (error) { return Response.json({ ...statusPayload(), error: String(error?.message || error) }, { status: 502 }); }
 }

@@ -1,3 +1,4 @@
+import { isDashboardAuthorized } from '../../../lib/access.js';
 const schema = {
   type: 'object',
   additionalProperties: false,
@@ -29,6 +30,7 @@ function demo(symbol, headline) {
 }
 
 export async function POST(request) {
+  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in first.' }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const symbol = String(body.symbol || '').toUpperCase().slice(0, 10);
   const headline = String(body.headline || '').slice(0, 1000);

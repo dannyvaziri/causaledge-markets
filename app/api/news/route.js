@@ -1,8 +1,10 @@
+import { isDashboardAuthorized } from '../../../lib/access.js';
 const DATA_BASE = 'https://data.alpaca.markets';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
+  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in first.' }, { status: 401 });
   const { searchParams } = new URL(request.url);
   const symbols = String(searchParams.get('symbols') || 'AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY')
     .toUpperCase().replace(/[^A-Z.,]/g, '').slice(0, 250);

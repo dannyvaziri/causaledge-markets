@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const START = 100;
 const TARGET = 1000;
@@ -16,6 +16,8 @@ function pct(value) {
 
 export default function Home() {
   const [token, setToken] = useState('');
+  const [user, setUser] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [draftToken, setDraftToken] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -31,7 +33,7 @@ export default function Home() {
   }
 
   async function refresh(silent = false) {
-    if (!token) return;
+    if (!token && !user) return;
     if (!silent) setBusy(true);
     try {
       const next = await request();
@@ -47,7 +49,7 @@ export default function Home() {
   }
 
   async function action(name) {
-    if (!token) return;
+    if (!token && !user) return;
     setBusy(true);
     try {
       const next = await request('/api/engine', {
@@ -66,6 +68,9 @@ export default function Home() {
   }
 
   useEffect(() => {
+    fetch('/api/auth/session', { cache: 'no-store' }).then((res) => res.json()).then((session) => setUser(session.user || null)).catch(() => setError('Unable to check sign-in. Please reload.')).finally(() => setCheckingSession(false));
+    const authError = new URLSearchParams(window.location.search).get('auth');
+    if (authError) setError(authError === 'google-config' ? 'Google sign-in is awaiting server configuration.' : 'Google sign-in could not be completed. Use your authorized account and try again.');
     const saved = window.localStorage.getItem('signalforge-access') || '';
     if (saved) {
       setToken(saved);
@@ -74,12 +79,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token && !user) return;
     refresh();
     const timer = window.setInterval(() => refresh(true), 30000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, user]);
 
   function unlock(e) {
     e.preventDefault();
@@ -89,7 +94,10 @@ export default function Home() {
     setToken(next);
   }
 
-  function lock() {
+  async function lock() {
+    const res = await fetch('/api/auth/logout', { method: 'POST' });
+    if (!res.ok) { setError('Sign-out failed. Please try again.'); return; }
+    setUser(null);
     window.localStorage.removeItem('signalforge-access');
     setToken('');
     setDraftToken('');
@@ -98,19 +106,25 @@ export default function Home() {
     setError('');
   }
 
-  if (!token) {
+  if (checkingSession) return <main className="loginShell"><section className="loginCard"><h1>SignalForge</h1><p>Checking sign-in…</p></section></main>;
+
+  if (!token && !user) {
     return <main className="loginShell">
       <section className="loginCard">
         <div className="logoMark">SF</div>
         <p className="eyebrow">PERSONAL TRADING LAB</p>
         <h1>SignalForge $100 Challenge</h1>
         <p>Autonomous market monitoring and paper trading with hard risk controls. Live-money execution is not enabled in this build.</p>
+        {error && <p role="alert">{error}</p>}
+        <button className="primary" onClick={() => { window.location.href = "/api/auth/google/start"; }}>Continue with Google</button>
+        <details><summary>Use a dashboard access token</summary>
         <form onSubmit={unlock}>
           <label>Dashboard access token</label>
           <input type="password" value={draftToken} onChange={(e) => setDraftToken(e.target.value)} placeholder="Enter your private token" autoComplete="current-password" />
           <button type="submit" className="primary">Open command center</button>
         </form>
-        <small>The token is stored only in this browser and compared with the server-side Hostinger environment variable.</small>
+        </details>
+        <small>Private dashboard access is restricted to the account owner.</small>
       </section>
     </main>;
   }
@@ -134,7 +148,7 @@ export default function Home() {
       <div className="topActions">
         <span className={`statusPill ${connected ? 'ok' : 'bad'}`}>{connected ? 'CONNECTED' : 'OFFLINE'}</span>
         <span className="statusPill paper">PAPER</span>
-        <button className="quiet" onClick={lock}>Lock</button>
+        <button className="quiet" onClick={lock}>Sign out</button>
       </div>
     </header>
 

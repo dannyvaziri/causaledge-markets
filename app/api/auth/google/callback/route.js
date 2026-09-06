@@ -1,3 +1,4 @@
+import { allowedEmail } from '../../../../../lib/access.js';
 import { appOrigin, clearCookie, cookie, GOOGLE_STATE_COOKIE, parseCookies, redirect, seal, SESSION_COOKIE } from '../../../../../lib/session.js';
 
 export async function GET(request) {
@@ -36,7 +37,7 @@ export async function GET(request) {
     });
     if (!userRes.ok) throw new Error('Google user profile request failed.');
     const profile = await userRes.json();
-    if (!profile.sub || !profile.email) throw new Error('Google profile is incomplete.');
+    if (!profile.sub || !profile.email || profile.email_verified !== true || !allowedEmail(profile.email)) throw new Error('Google profile is incomplete.');
 
     const session = seal({
       id: profile.sub,
