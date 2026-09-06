@@ -22,12 +22,12 @@ jobs:
         if: github.event_name == 'push'
         run: |
           cat > .env.production <<'EOF'
-          APP_URL=https://palegreen-gnu-726608.hostingersite.com
-          AUTH_SECRET=
-          GOOGLE_CLIENT_ID=
-          GOOGLE_CLIENT_SECRET=
-          ALPACA_OAUTH_CLIENT_ID=
-          ALPACA_OAUTH_CLIENT_SECRET=
+          APP_URL=https://yellowgreen-coyote-640624.hostingersite.com
+          DASHBOARD_TOKEN=
+          ENGINE_SECRET=
+          CHALLENGE_START=100
+          CHALLENGE_TARGET=1000
+          CHALLENGE_WATCHLIST=AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY
           PAPER_EXECUTION_ENABLED=false
           AUTO_EXECUTION_ENABLED=false
           TRADING_KILL_SWITCH=false
@@ -35,6 +35,11 @@ jobs:
           ALPACA_API_SECRET=
           OPENAI_API_KEY=
           OPENAI_MODEL=gpt-5.4-mini
+          AUTH_SECRET=
+          GOOGLE_CLIENT_ID=
+          GOOGLE_CLIENT_SECRET=
+          ALPACA_OAUTH_CLIENT_ID=
+          ALPACA_OAUTH_CLIENT_SECRET=
           EOF
       - name: Package Hostinger upload
         if: github.event_name == 'push'
