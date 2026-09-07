@@ -1,8 +1,11 @@
-import './globals.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import './styles/base.css';
+import './styles/panels.css';
+import './styles/overlays.css';
 
 export const metadata = {
-  title: 'SignalForge | $100 Challenge',
-  description: 'Personal AI market-monitoring and autonomous paper-trading experiment with deterministic risk controls.',
+  title: 'SignalForge | Global Market Intelligence',
+  description: 'Live global intelligence, market monitoring, AI dossiers, and autonomous paper trading with deterministic risk controls.',
 };
 
 export default function RootLayout({ children }) {
