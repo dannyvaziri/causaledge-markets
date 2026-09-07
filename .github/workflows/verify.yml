@@ -44,14 +44,14 @@ jobs:
       - name: Package Hostinger upload
         if: github.event_name == 'push'
         run: |
-          zip -r signalforge.zip . \
+          zip -r causaledge-markets.zip . \
             -x '.git/*' '.github/*' 'node_modules/*' '.next/*' \
                '.env' '.env.local' '.env.*.local' 'npm-debug.log*' '.DS_Store'
       - name: Upload Hostinger package
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: signalforge-hostinger
-          path: signalforge.zip
+          name: causaledge-markets-hostinger
+          path: causaledge-markets.zip
           if-no-files-found: error
           retention-days: 7
