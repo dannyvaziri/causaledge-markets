@@ -1,4 +1,5 @@
 import { isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
+import { aiConfigured, requestStructured } from '../../../lib/ai.js';
 import { evaluateRisk } from '../../../lib/risk.js';
 
 export const dynamic = 'force-dynamic';
@@ -135,7 +136,7 @@ async function getRecentNews() {
 }
 
 async function chooseCandidate(news) {
-  if (!process.env.OPENAI_API_KEY || !news.length) return { signal: 'HOLD', confidence: 0, impact: 0, reason: 'No AI or fresh news available.' };
+  if (!aiConfigured() || !news.length) return { signal: 'HOLD', confidence: 0, impact: 0, reason: 'No AI or fresh news available.' };
 
   const compact = news.map((n) => ({ id: String(n.id), headline: n.headline, summary: n.summary, symbols: n.symbols, created_at: n.created_at }));
   const schema = {
@@ -151,21 +152,7 @@ async function chooseCandidate(news) {
   };
 
   const prompt = `You are the catalyst classifier inside an autonomous PAPER-TRADING experiment. Select at most one long BUY candidate from the supplied fresh news. Prefer genuinely material, surprising company-specific catalysts. Avoid vague commentary, already-old items, macro speculation, leveraged ETFs, and weak sentiment-only headlines. If there is not an unusually strong candidate, return HOLD. You cannot change sizing or risk controls.\n\nNEWS:\n${JSON.stringify(compact)}`;
-  const res = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-5.4-mini',
-      input: prompt,
-      text: { format: { type: 'json_schema', name: 'candidate', strict: true, schema } },
-    }),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`AI analysis failed (${res.status})`);
-  const data = await res.json();
-  const text = data.output_text || data.output?.flatMap((o) => o.content || []).find((c) => c.type === 'output_text')?.text;
-  if (!text) throw new Error('AI returned no candidate payload.');
-  const candidate = JSON.parse(text);
+  const candidate = await requestStructured({ input: prompt, schema, name: 'candidate' });
   candidate.symbol = String(candidate.symbol || '').toUpperCase();
   if (candidate.signal === 'BUY' && !WATCHLIST.includes(candidate.symbol)) return { signal: 'HOLD', confidence: 0, impact: 0, reason: 'AI selected a symbol outside the allowlist.' };
   return candidate;
