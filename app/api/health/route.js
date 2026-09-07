@@ -4,7 +4,7 @@ export async function GET() {
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.ALLOWED_GOOGLE_EMAILS);
   const authConfigured = Boolean(process.env.AUTH_SECRET);
   const brokerConfigured = Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET);
-  const aiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const aiConfigured = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
   const cronConfigured = Boolean(process.env.CRON_SECRET || process.env.ENGINE_SECRET);
 
   return Response.json({
