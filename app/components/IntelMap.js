@@ -35,8 +35,8 @@ export default function IntelMap({ events = [], selectedEvent, onSelect, onRegio
           osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap contributors' },
         },
         layers: [
-          { id: 'bg', type: 'background', paint: { 'background-color': '#071018' } },
-          { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 0.34, 'raster-saturation': -0.75, 'raster-contrast': 0.3, 'raster-brightness-max': 0.55 } },
+          { id: 'bg', type: 'background', paint: { 'background-color': '#eef5f0' } },
+          { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 0.72, 'raster-saturation': -0.15, 'raster-contrast': -0.05, 'raster-brightness-max': 0.92 } },
         ],
       },
     });
