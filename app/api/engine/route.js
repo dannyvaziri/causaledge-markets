@@ -118,7 +118,7 @@ function statusPayload(snapshot = { account: null, positions: [] }) {
       autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
       killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
       brokerConfigured: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
-      aiConfigured: Boolean(process.env.OPENAI_API_KEY),
+      aiConfigured: aiConfigured(),
       liveTrading: false,
     },
     logs: runtime.logs,
