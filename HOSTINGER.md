@@ -1,10 +1,11 @@
-# Hostinger GitHub Deployment
+# CausalEdge Markets — Hostinger GitHub Deployment
 
-SignalForge is configured for direct deployment from GitHub using Hostinger's managed Node.js / Next.js hosting.
+CausalEdge Markets is configured for direct deployment from GitHub using Hostinger's managed Node.js / Next.js hosting.
 
 ## Repository
 
-- Repository: `dannyvaziri/signalforge-ai`
+- Current repository: `dannyvaziri/signalforge-ai`
+- Intended repository name after GitHub admin rename: `dannyvaziri/causaledge-markets`
 - Branch: `main`
 - Framework: Next.js
 - Node.js: `22.x`
@@ -83,7 +84,7 @@ https://yellowgreen-coyote-640624.hostingersite.com/api/auth/google/callback
 
 1. Open hPanel → Websites → Add Website / Deploy Web App.
 2. Choose GitHub integration.
-3. Select `dannyvaziri/signalforge-ai`.
+3. Select the CausalEdge Markets repository (`dannyvaziri/causaledge-markets` after the repository itself is renamed; until then use `dannyvaziri/signalforge-ai`).
 4. Select branch `main`.
 5. Confirm Next.js and Node `22.x` are detected.
 6. Confirm build command `npm run build` and start command `npm start`.
