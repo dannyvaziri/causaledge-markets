@@ -15,3 +15,18 @@ html,body{background:#f5f7f6;color:var(--text)}
 .panelHud,.layersPanel,.intelPanel,.engineHud,.tickerBar,.bottomStatus,.drawer,.helpModal{background:rgba(255,255,255,.94)!important;border-color:#dce8df!important;box-shadow:0 14px 36px rgba(26,66,43,.09)}
 .panelHud h2,.layersPanel h2,.intelPanel h2,.engineHud h2,.drawer h2,.helpModal h2,.tickerBar b{color:#193126}.panelHud p,.layersPanel p,.intelPanel p,.engineHud p,.bottomStatus{color:#6d8175}.toolRail button,.iconButton,.closeButton{background:#fff;border-color:#d7e4db;color:#44705a}.toolRail button.active{background:#edf9f2;border-color:#9ed4b1;color:#12814a}.layerRow,.intelRow,.engineRow,.tickerItem{border-color:#e4ece6}.layerRow strong,.intelRow strong,.engineRow strong{color:#234334}.layerRow small,.intelRow small,.engineRow small{color:#6d8175}.bottomStatus{background:rgba(255,255,255,.82)}
 .loginShell{background:radial-gradient(circle at 50% 0%,rgba(22,160,93,.1),transparent 34rem),#f5f7f6}.loginCard{background:#fff;border-color:#dfe9e3;box-shadow:0 28px 80px rgba(26,66,43,.12);border-radius:20px}.loginCard h1{color:#17231d}.loginCard>p:not(.eyebrow),.loginCard label,.loginCard small{color:#6d8175}.loginCard input{background:#f7faf8;color:#17231d;border-color:#d7e4db}.googleBtn,.loginCard form button{background:#16a05d;border-color:#16a05d;color:#fff;border-radius:10px}.googleBtn:hover,.loginCard form button:hover{background:#12814a;border-color:#12814a}
+
+/* Simple dashboard mode: prioritize understandable information over the map. */
+.commandShell{overflow:auto;min-height:100vh;height:auto;background:#f5f7f6}
+.mapStage{display:none}
+.topHud{position:sticky;left:auto;right:auto;top:0;margin:0 20px;height:72px;grid-template-columns:auto minmax(240px,1fr) auto;border-radius:0 0 16px 16px}
+.dashboardSurface{max-width:1320px;margin:0 auto;padding:18px 20px 84px;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.8fr);grid-template-areas:'nav nav' 'layers intel' 'engine engine' 'markets markets';gap:16px}
+.dashboardSurface .toolRail{position:static;grid-area:nav;display:flex;gap:10px;align-items:center}
+.dashboardSurface .toolButton{width:auto;min-width:112px}
+.dashboardSurface .hudPanel{position:static;inset:auto;width:auto;height:520px;max-height:none;backdrop-filter:none;border-radius:16px;box-shadow:0 12px 32px rgba(26,66,43,.08);overflow:hidden}
+.dashboardSurface .layerHud{grid-area:layers}.dashboardSurface .intelHud{grid-area:intel}
+.dashboardSurface .engineHud{position:static;grid-area:engine;width:auto;min-height:88px;border-radius:16px;box-shadow:0 12px 32px rgba(26,66,43,.08);backdrop-filter:none}
+.dashboardSurface .tickerDock{position:static;grid-area:markets;height:76px;border-radius:16px;box-shadow:0 12px 32px rgba(26,66,43,.08);background:#fff;border-color:#dce8df}
+.dashboardSurface .bottomStatus{display:none}
+@media(max-width:900px){.dashboardSurface{grid-template-columns:1fr;grid-template-areas:'nav' 'layers' 'intel' 'engine' 'markets'}.dashboardSurface .hudPanel{height:420px}.topHud{margin:0 10px}.dashboardSurface{padding:14px 10px 76px}}
+@media(max-width:600px){.topHud{position:sticky;height:64px}.dashboardSurface .toolRail{overflow-x:auto;padding-bottom:2px}.dashboardSurface .toolButton{min-width:104px}.dashboardSurface .hudPanel{height:390px}.dashboardSurface .engineHud{grid-template-columns:1fr}.dashboardSurface .engineActions{justify-content:flex-start}}
