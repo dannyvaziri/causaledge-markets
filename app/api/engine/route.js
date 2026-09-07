@@ -5,7 +5,12 @@ import { evaluateRisk } from '../../../lib/risk.js';
 export const dynamic = 'force-dynamic';
 
 const PAPER_BASE = 'https://paper-api.alpaca.markets';
+const LIVE_BASE = 'https://api.alpaca.markets';
 const DATA_BASE = 'https://data.alpaca.markets';
+function liveTradingEnabled() { return process.env.LIVE_TRADING_ENABLED === 'true'; }
+function activeBase() { return liveTradingEnabled() ? LIVE_BASE : PAPER_BASE; }
+function activeKey() { return liveTradingEnabled() ? process.env.LIVE_ALPACA_API_KEY : process.env.ALPACA_API_KEY; }
+function activeSecret() { return liveTradingEnabled() ? process.env.LIVE_ALPACA_API_SECRET : process.env.ALPACA_API_SECRET; }
 const WATCHLIST = (process.env.CHALLENGE_WATCHLIST || 'AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY')
   .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 30);
 
@@ -22,8 +27,8 @@ function log(type, message, symbol = '') {
 
 function paperHeaders() {
   return {
-    'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
-    'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET || '',
+    'APCA-API-KEY-ID': activeKey() || '',
+    'APCA-API-SECRET-KEY': activeSecret() || '',
     'Content-Type': 'application/json',
   };
 }
@@ -38,7 +43,7 @@ async function jsonFetch(url, options = {}) {
 }
 
 async function alpaca(path, options = {}) {
-  return jsonFetch(`${PAPER_BASE}${path}`, { ...options, headers: { ...paperHeaders(), ...(options.headers || {}) } });
+  return jsonFetch(`${activeBase()}${path}`, { ...options, headers: { ...paperHeaders(), ...(options.headers || {}) } });
 }
 
 async function marketData(path) {
@@ -66,7 +71,7 @@ function isEngineAuthorized(request) {
 }
 
 async function accountSnapshot() {
-  if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) {
+  if (!activeKey() || !activeSecret()) {
     return { account: null, positions: [] };
   }
   const [account, rawPositions] = await Promise.all([alpaca('/v2/account'), alpaca('/v2/positions')]);
@@ -97,7 +102,7 @@ function statusPayload(snapshot = { account: null, positions: [] }) {
   const equity = snapshot.account?.equity || Number(process.env.CHALLENGE_START || 100);
   const guard = limits(equity);
   return {
-    mode: 'paper',
+    mode: liveTradingEnabled() ? 'live' : 'paper',
     account: snapshot.account || { equity: Number(process.env.CHALLENGE_START || 100), cash: Number(process.env.CHALLENGE_START || 100), dayPnl: 0 },
     positions: snapshot.positions || [],
     challenge: {
@@ -119,7 +124,7 @@ function statusPayload(snapshot = { account: null, positions: [] }) {
       killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
       brokerConfigured: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
       aiConfigured: aiConfigured(),
-      liveTrading: false,
+      liveTrading: liveTradingEnabled(),
     },
     logs: runtime.logs,
   };
@@ -190,11 +195,11 @@ async function runCycle() {
   runtime.lastRun = now();
   if (runtime.paused) { log('SYSTEM', 'Cycle skipped because the engine is paused.'); return accountSnapshot(); }
   if (process.env.TRADING_KILL_SWITCH === 'true') { log('REJECT', 'Cycle blocked by the global kill switch.'); return accountSnapshot(); }
-  if (process.env.PAPER_EXECUTION_ENABLED !== 'true' || process.env.AUTO_EXECUTION_ENABLED !== 'true') {
+  if (!liveTradingEnabled() && (process.env.PAPER_EXECUTION_ENABLED !== 'true' || process.env.AUTO_EXECUTION_ENABLED !== 'true')) {
     log('REJECT', 'Paper or automatic execution is disabled in the server environment.');
     return accountSnapshot();
   }
-  if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) throw new Error('Alpaca paper credentials are not configured.');
+  if (!activeKey() || !activeSecret()) throw new Error(liveTradingEnabled() ? 'Alpaca live credentials are not configured.' : 'Alpaca paper credentials are not configured.');
 
   const snapshot = await accountSnapshot();
   if (snapshot.account?.tradingBlocked) { log('REJECT', 'Broker reports trading is blocked.'); return snapshot; }
