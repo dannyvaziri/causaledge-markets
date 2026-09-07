@@ -82,9 +82,9 @@ export default function IntelMap({ events = [], selectedEvent, onSelect, onRegio
     map.on('mouseenter', 'intel-points', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'intel-points', () => { map.getCanvas().style.cursor = ''; });
     const reset = () => map.flyTo({ center: [0, 20], zoom: 1.35, essential: true });
-    window.addEventListener('sf-reset-map', reset);
+    window.addEventListener('causaledge-reset-map', reset);
     mapRef.current = map;
-    return () => { window.removeEventListener('sf-reset-map', reset); map.remove(); mapRef.current = null; };
+    return () => { window.removeEventListener('causaledge-reset-map', reset); map.remove(); mapRef.current = null; };
   }, [onRegion, onSelect]);
 
   useEffect(() => {
@@ -108,5 +108,5 @@ export default function IntelMap({ events = [], selectedEvent, onSelect, onRegio
     map.flyTo({ center: [Number(selectedEvent.lon), Number(selectedEvent.lat)], zoom: Math.max(map.getZoom(), 4), essential: true });
   }, [selectedEvent]);
 
-  return <div ref={el} className="intelMap" aria-label="Global market intelligence map" />;
+  return <div ref={el} className="intelMap" aria-label="CausalEdge Markets global intelligence map" />;
 }
