@@ -1,28 +1,51 @@
-# SignalForge — $100 Challenge
+# CausalEdge Markets
 
-SignalForge is a personal autonomous **paper-trading** experiment designed to test whether a news + AI + deterministic-risk strategy can grow a $100 account toward $1,000 without giving an AI model unrestricted control.
+**CausalEdge Markets** is a global market-intelligence command center that connects real-world causes to market effects. It combines geopolitical events, hazards, supply-chain and country-risk intelligence, market/news data, AI-generated company and regional dossiers, relationship mapping, market briefings, and a deterministic risk-gated paper-trading engine.
 
-> This repository intentionally contains no live Alpaca trading endpoint. It can autonomously submit Alpaca **paper** orders only.
-
-## Flow
+The product is built around a simple idea:
 
 ```text
-fresh Alpaca news
-      ↓
-AI catalyst classifier
-      ↓
-market confirmation
-      ↓
-deterministic risk engine
-      ↓
-Alpaca PAPER order
-      ↓
-automatic stop/profit exits
+GLOBAL EVENT / COMPANY CATALYST
+              ↓
+NORMALIZED INTELLIGENCE LAYER
+              ↓
+AI CORRELATION + MARKET CONTEXT
+              ↓
+COMPANY / REGION / ENTITY DOSSIERS
+              ↓
+MARKET CONFIRMATION
+              ↓
+DETERMINISTIC RISK ENGINE
+              ↓
+ALPACA PAPER EXECUTION
 ```
 
-## Starting guardrails
+> The current repository intentionally contains no live-money Alpaca execution endpoint. Automated execution is restricted to Alpaca paper trading.
 
-At approximately $100 equity:
+## Core capabilities
+
+- full-screen MapLibre global intelligence map
+- normalized geopolitical and global-event feeds
+- country-risk and supply-chain intelligence
+- USGS earthquake data and NASA hazard fallbacks
+- Alpaca market snapshots and financial news
+- source-health monitoring and fail-soft data ingestion
+- company dossiers with live market/news context
+- regional dossiers from map locations
+- AI market briefings that correlate current events and market activity
+- entity/relationship views for connected companies and themes
+- live watchlist ticker and market-session status
+- keyboard-driven intelligence command center
+- private Google-authenticated dashboard
+- $100 → $1,000 paper-trading experiment
+- deterministic position/risk controls
+- automated paper entries and exits
+- pause, run-cycle, close-all, and kill-switch controls
+- auditable decision journal
+
+## $100 paper challenge
+
+At approximately $100 equity, the default guardrails are:
 
 - Starting challenge: $100
 - Target scoreboard: $1,000
@@ -45,33 +68,34 @@ At approximately $100 equity:
 
 Position sizing scales with account equity while remaining capped at $250 per new order.
 
-## Personal dashboard
+## Authentication
 
-The home page is a private command center showing:
+The dashboard supports Google sign-in with a secure HttpOnly session cookie. Configure:
 
-- challenge equity and $100 → $1,000 progress
-- daily P&L and cash
-- current paper positions
-- risk configuration
-- autonomous engine status
-- decision journal
-- Run cycle now
-- Pause / Resume
-- Close all paper positions
-
-The dashboard supports Google sign-in with a secure, HttpOnly session cookie. Set `APP_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ALLOWED_GOOGLE_EMAILS` (a comma-separated owner allowlist). Only verified Google accounts on that list can access the personal dashboard. An optional `DASHBOARD_TOKEN` remains available for operator access. Broker, news, and analysis routes require authentication.
-
-## Autonomous engine
-
-`POST /api/engine` runs one cycle. A Hostinger cron job can call it repeatedly so the browser does not have to stay open.
-
-Recommended cron request:
-
-```bash
-curl -fsS -X POST "https://YOUR-SITE/api/engine?action=run" -H "x-engine-secret: $CRON_SECRET" -H "Content-Type: application/json" -d '{}'
+```text
+APP_URL=
+AUTH_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+ALLOWED_GOOGLE_EMAILS=
 ```
 
-Run every 5 minutes during market hours for the initial experiment. The endpoint also accepts dashboard actions:
+An optional `DASHBOARD_TOKEN` remains available for operator access. Authenticated dashboard requests use the `x-ce-token` header when token access is used.
+
+## Autonomous paper engine
+
+`POST /api/engine` runs one engine cycle. A Hostinger cron job can invoke it so the browser does not need to remain open.
+
+Example:
+
+```bash
+curl -fsS -X POST "https://YOUR-SITE/api/engine?action=run" \
+  -H "x-engine-secret: $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Supported operator actions:
 
 ```json
 { "action": "run" }
@@ -80,44 +104,48 @@ Run every 5 minutes during market hours for the initial experiment. The endpoint
 { "action": "close-all" }
 ```
 
-The in-process journal and duplicate cache reset when the Node process restarts. Persistent database-backed journaling should be added before treating this as production infrastructure.
-
 ## Environment
 
 Copy `.env.example` locally or configure the same variables in Hostinger:
 
 ```text
-DASHBOARD_TOKEN=<long random value>
-ENGINE_SECRET=<different long random value>
+APP_URL=https://yellowgreen-coyote-640624.hostingersite.com
+
+DASHBOARD_TOKEN=
+ENGINE_SECRET=
+CRON_SECRET=
 
 CHALLENGE_START=100
 CHALLENGE_TARGET=1000
+CHALLENGE_WATCHLIST=AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY
 
 PAPER_EXECUTION_ENABLED=false
 AUTO_EXECUTION_ENABLED=false
 TRADING_KILL_SWITCH=false
 
-ALPACA_API_KEY=<paper key>
-ALPACA_API_SECRET=<paper secret>
-OPENAI_API_KEY=<server-side key>
+ALPACA_API_KEY=
+ALPACA_API_SECRET=
+
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-mini
 ```
 
-Never commit real credentials.
+Never commit actual credentials.
 
-### Safe rollout
+## Safe rollout
 
-1. Reset or create a dedicated Alpaca paper account with a $100 starting balance.
-2. Deploy the app with both execution flags set to `false`.
-3. Add Alpaca paper and OpenAI credentials and verify the dashboard.
+1. Use a dedicated Alpaca paper account with a $100 starting balance.
+2. Deploy with both execution flags set to `false`.
+3. Add Alpaca paper and OpenAI credentials and verify intelligence/dashboard routes.
 4. Set `PAPER_EXECUTION_ENABLED=true` and manually run several cycles.
-5. Review the journal and broker orders.
-6. Only then set `AUTO_EXECUTION_ENABLED=true` and enable the 5-minute cron.
+5. Review the decision journal and broker paper orders.
+6. Only then set `AUTO_EXECUTION_ENABLED=true` and enable the protected cron schedule.
 
-`TRADING_KILL_SWITCH=true` blocks new autonomous entries. The dashboard close-all action remains available for paper positions.
+`TRADING_KILL_SWITCH=true` blocks new autonomous entries.
 
 ## Development
 
-Requires Node 20+.
+Requires Node 22.x.
 
 ```bash
 npm install
@@ -130,14 +158,16 @@ GitHub Actions verifies tests and a production build on pushes to `main`.
 
 ## Hostinger
 
-The project is a Next.js Node application configured for Hostinger Node.js hosting. Deploy source code without `node_modules`, install dependencies, build with `npm run build`, and start with `npm start`.
+CausalEdge Markets is a Next.js Node application configured for direct GitHub deployment on Hostinger.
 
-Target deployment for this project:
+Current production target:
 
 ```text
 https://yellowgreen-coyote-640624.hostingersite.com/
 ```
 
+See `HOSTINGER.md` for deployment settings.
+
 ## Credential separation
 
-`ALPACA_API_KEY` and `ALPACA_API_SECRET` are exclusively PAPER credentials, used only against the fixed paper API and market-data endpoints. `ALPACA_LIVE_API_KEY` and `ALPACA_LIVE_API_SECRET` are reserved server-side storage names; no execution code reads them. `LIVE_TRADING_ENABLED` must remain `false`. Keep `PAPER_EXECUTION_ENABLED=false`, `AUTO_EXECUTION_ENABLED=false`, and `TRADING_KILL_SWITCH=true` during setup. `CRON_SECRET` replaces the older `ENGINE_SECRET` name (the latter remains a fallback). Cron credentials are accepted only in a request header to avoid leaking them through URLs.
+`ALPACA_API_KEY` and `ALPACA_API_SECRET` are paper credentials used by the fixed paper-trading execution paths. `ALPACA_LIVE_API_KEY` and `ALPACA_LIVE_API_SECRET` are reserved server-side names and are not consumed by the current execution engine. `LIVE_TRADING_ENABLED` must remain `false` in this build.
