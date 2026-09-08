@@ -41,3 +41,4 @@ html,body{background:#f5f7f6;color:var(--text)}
 html:has(.simpleApp),body:has(.simpleApp){overflow:hidden;height:100%}
 .simpleApp{height:100vh;min-height:0;overflow-y:auto;overflow-x:hidden}
 .detailSheet{position:relative;background:#f1faf4;border:1px solid #bfe4cb;border-radius:16px;padding:24px;margin-top:18px;box-shadow:0 12px 28px rgba(26,66,43,.08)}.detailSheet h2{font-size:24px;letter-spacing:-.04em;margin:0 0 8px}.detailSheet p:not(.simpleKicker){color:#5e7466;font-size:13px;line-height:1.6;max-width:620px}.detailClose{position:absolute;right:14px;top:12px;border:0;background:transparent;color:#6d8175;font-size:12px;font-weight:800;cursor:pointer}
+.actionConfirmation{color:#197447!important;font-weight:700!important;margin-top:10px!important}
