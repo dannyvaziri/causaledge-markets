@@ -10,10 +10,11 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "maplibre-gl": "^5.6.2",
     "next": "15.5.23",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "maplibre-gl": "^5.6.2"
+    "react-dom": "19.2.8"
   },
   "engines": {
     "node": "22.x"

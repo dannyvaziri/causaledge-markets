@@ -60,6 +60,11 @@ OPENAI_MODEL=gpt-5.4-mini
 ALPACA_LIVE_API_KEY=
 ALPACA_LIVE_API_SECRET=
 LIVE_TRADING_ENABLED=false
+
+# Supabase execution audit database (server-side only)
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 The current application intentionally keeps live-money execution disabled. The live credential variables are reserved and are not consumed by the paper execution routes.

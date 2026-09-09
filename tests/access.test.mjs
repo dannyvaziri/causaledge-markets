@@ -27,7 +27,7 @@ test('owner sessions protect account access and reject cross-origin writes', () 
 });
 
 test('anonymous requests cannot access broker or classifier routes', async () => {
-  for (const [path, method] of [['engine', 'GET'], ['paper-order', 'POST'], ['analyze', 'POST'], ['news', 'GET']]) {
+  for (const [path, method] of [['engine', 'GET'], ['paper-order', 'POST'], ['live-order', 'POST'], ['live-close-all', 'POST'], ['analyze', 'POST'], ['news', 'GET']]) {
     const route = await import(`../app/api/${path}/route.js`);
     const response = await route[method](new Request(`https://signalforge.example/api/${path}`, { method }));
     assert.equal(response.status, 401, path);
