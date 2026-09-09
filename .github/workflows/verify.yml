@@ -22,24 +22,31 @@ jobs:
         if: github.event_name == 'push'
         run: |
           cat > .env.production <<'EOF'
-          APP_URL=https://yellowgreen-coyote-640624.hostingersite.com
+          APP_URL=https://darkviolet-ibis-337737.hostingersite.com
           DASHBOARD_TOKEN=
+          AUTH_SECRET=
+          GOOGLE_CLIENT_ID=
+          GOOGLE_CLIENT_SECRET=
+          ALLOWED_GOOGLE_EMAILS=
           ENGINE_SECRET=
+          CRON_SECRET=
           CHALLENGE_START=100
           CHALLENGE_TARGET=1000
           CHALLENGE_WATCHLIST=AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY
           PAPER_EXECUTION_ENABLED=false
           AUTO_EXECUTION_ENABLED=false
-          TRADING_KILL_SWITCH=false
+          TRADING_KILL_SWITCH=true
+          LIVE_TRADING_ENABLED=false
           ALPACA_API_KEY=
           ALPACA_API_SECRET=
-          OPENAI_API_KEY=
-          OPENAI_MODEL=gpt-5.4-mini
-          AUTH_SECRET=
-          GOOGLE_CLIENT_ID=
-          GOOGLE_CLIENT_SECRET=
           ALPACA_OAUTH_CLIENT_ID=
           ALPACA_OAUTH_CLIENT_SECRET=
+          GROQ_API_KEY=
+          AI_MODEL=openai/gpt-oss-120b
+          OPENAI_API_KEY=
+          OPENAI_MODEL=gpt-5.4-mini
+          LIVE_ALPACA_API_KEY=
+          LIVE_ALPACA_API_SECRET=
           EOF
       - name: Package Hostinger upload
         if: github.event_name == 'push'
