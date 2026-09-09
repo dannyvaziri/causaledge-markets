@@ -30,7 +30,7 @@ export async function POST(request) {
     return Response.json({ approved: false, demo: true, error: 'Alpaca paper credentials are not configured.' }, { status: 400 });
   }
 
-  const symbol = String(body.symbol || '').toUpperCase();
+  const symbol = String(body.symbol || '').toUpperCase().replace('-', '/');
   const assetType = body.assetType === 'crypto' ? 'crypto' : 'stock';
   const side = String(body.side || '').toUpperCase();
   const source = body.source === 'auto' ? 'auto' : 'manual';
@@ -44,7 +44,8 @@ export async function POST(request) {
       alpaca('/v2/account'),
       alpaca('/v2/positions'),
     ]);
-    const position = positions.find((p) => p.symbol === symbol);
+    const normalized = (value) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const position = positions.find((p) => normalized(p.symbol) === normalized(symbol));
     const equity = Number(account.equity || 0);
     const lastEquity = Number(account.last_equity || equity || 1);
     const dailyLossPct = Math.max(((lastEquity - equity) / Math.max(lastEquity, 1)) * 100, 0);
@@ -73,8 +74,8 @@ export async function POST(request) {
     if (!risk.approved) return Response.json({ approved: false, risk }, { status: 403 });
 
     const order = side === 'BUY'
-      ? { symbol, side: 'buy', type: 'market', time_in_force: 'day', notional: String(notional) }
-      : { symbol, side: 'sell', type: 'market', time_in_force: 'day', qty: String(qty) };
+      ? { symbol, side: 'buy', type: 'market', time_in_force: assetType === 'crypto' ? 'gtc' : 'day', notional: String(notional) }
+      : { symbol, side: 'sell', type: 'market', time_in_force: assetType === 'crypto' ? 'gtc' : 'day', qty: String(qty) };
 
     const placed = await alpaca('/v2/orders', { method: 'POST', body: JSON.stringify(order) });
     if (duplicateKey) seen.add(duplicateKey);
