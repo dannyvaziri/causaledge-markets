@@ -33,29 +33,12 @@ function sameSymbol(a, b) {
 
 async function accountSnapshot() {
   if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return { account: null, positions: [] };
-  const [account, positions] = await Promise.all([
-    jsonFetch(`${PAPER_BASE}/v2/account`),
-    jsonFetch(`${PAPER_BASE}/v2/positions`),
-  ]);
+  const [account, positions] = await Promise.all([jsonFetch(`${PAPER_BASE}/v2/account`), jsonFetch(`${PAPER_BASE}/v2/positions`)]);
   const equity = Number(account?.equity || 0);
   const lastEquity = Number(account?.last_equity || equity || 0);
   return {
-    account: {
-      equity,
-      cash: Number(account?.cash || 0),
-      buyingPower: Number(account?.buying_power || 0),
-      dayPnl: Number((equity - lastEquity).toFixed(2)),
-      status: account?.status || '',
-      tradingBlocked: Boolean(account?.trading_blocked),
-    },
-    positions: (positions || []).map((position) => ({
-      symbol: position.symbol,
-      qty: Number(position.qty || 0),
-      marketValue: Number(position.market_value || 0),
-      currentPrice: Number(position.current_price || 0),
-      unrealizedPnl: Number(position.unrealized_pl || 0),
-      unrealizedPlpc: Number(position.unrealized_plpc || 0),
-    })),
+    account: { equity, cash: Number(account?.cash || 0), buyingPower: Number(account?.buying_power || 0), dayPnl: Number((equity - lastEquity).toFixed(2)), status: account?.status || '', tradingBlocked: Boolean(account?.trading_blocked) },
+    positions: (positions || []).map((position) => ({ symbol: position.symbol, qty: Number(position.qty || 0), marketValue: Number(position.market_value || 0), currentPrice: Number(position.current_price || 0), unrealizedPnl: Number(position.unrealized_pl || 0), unrealizedPlpc: Number(position.unrealized_plpc || 0) })),
   };
 }
 
@@ -73,26 +56,23 @@ async function marketSeries(bot) {
   const series = bars.map((bar) => ({ time: bar.t, open: Number(bar.o || 0), high: Number(bar.h || 0), low: Number(bar.l || 0), close: Number(bar.c || 0), volume: Number(bar.v || 0) })).filter((bar) => bar.close > 0);
   const first = series[0]?.close || 0;
   const last = series.at(-1)?.close || 0;
-  return {
-    price: last || null,
-    changePct: first > 0 && last > 0 ? Number((((last - first) / first) * 100).toFixed(3)) : null,
-    series,
-  };
+  return { price: last || null, changePct: first > 0 && last > 0 ? Number((((last - first) / first) * 100).toFixed(3)) : null, series };
 }
 
 function nextPlan(bot, safety) {
   if (bot.status === 'paused') return 'Paused. Resume this bot when you want it to evaluate its next paper signal.';
   if (bot.status === 'stopped') return 'Stopped. Edit or duplicate it before running again.';
+  if (!safety.multiBotArmed) return 'Multi-bot execution is not armed yet. The bot can monitor and show charts, but it cannot submit a new entry.';
   if (safety.killSwitch) return 'Global kill switch is on, so no new entry can be submitted.';
   if (!safety.paperExecution) return 'Waiting for paper execution authorization.';
   if (!safety.autoExecution) return 'Waiting for automatic paper execution authorization.';
-  const map = {
+  const plans = {
     momentum: 'Compare recent 5-minute momentum and only consider an entry after account-level risk checks.',
     trend: 'Check whether price remains above its recent average with a positive slope, then apply shared risk limits.',
     'mean-reversion': 'Watch for an unusually weak move below the recent average, then apply shared risk limits.',
     breakout: 'Watch for a break above the recent range, then apply shared risk limits before any paper entry.',
   };
-  return map[bot.strategy] || 'Evaluate the next paper signal and shared account-level risk limits.';
+  return plans[bot.strategy] || 'Evaluate the next paper signal and shared account-level risk limits.';
 }
 
 export async function GET(request) {
@@ -104,10 +84,11 @@ export async function GET(request) {
     const snapshot = await accountSnapshot().catch(() => ({ account: null, positions: [] }));
     const activity = requestedId ? await loadBotActivity(requestedId, 120) : await loadRecentBotActivity(240);
     const safety = {
+      multiBotArmed: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
       paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
       autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
       killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-      liveTrading: false,
+      liveTrading: process.env.LIVE_TRADING_ENABLED === 'true',
     };
 
     const selected = requestedId ? bots.filter((bot) => bot.id === requestedId) : bots;
@@ -116,14 +97,7 @@ export async function GET(request) {
       const position = snapshot.positions.find((item) => sameSymbol(item.symbol, bot.symbol)) || null;
       const botActivity = (activity || []).filter((row) => String(row?.metadata?.botId || '') === bot.id);
       const lastAction = botActivity.find((row) => !['BOT_CONFIG', 'BOT_DELETE'].includes(row.event_type));
-      return {
-        ...bot,
-        market,
-        position,
-        lastAction: lastAction ? { type: lastAction.event_type, status: lastAction.status, message: lastAction.message, time: lastAction.created_at } : null,
-        nextAction: nextPlan(bot, safety),
-        activity: requestedId ? botActivity : undefined,
-      };
+      return { ...bot, market, position, lastAction: lastAction ? { type: lastAction.event_type, status: lastAction.status, message: lastAction.message, time: lastAction.created_at } : null, nextAction: nextPlan(bot, safety), activity: requestedId ? botActivity : undefined };
     }));
 
     const sharedRisk = sharedRiskLimits(snapshot.account?.equity || 100);
@@ -133,12 +107,7 @@ export async function GET(request) {
       account: snapshot.account,
       positions: snapshot.positions,
       safety,
-      sharedRisk: {
-        ...sharedRisk,
-        currentOpenPositions: snapshot.positions.length,
-        currentExposureUsd: Number(totalExposure.toFixed(2)),
-        currentExposurePct: snapshot.account?.equity ? Number(((totalExposure / snapshot.account.equity) * 100).toFixed(2)) : 0,
-      },
+      sharedRisk: { ...sharedRisk, currentOpenPositions: snapshot.positions.length, currentExposureUsd: Number(totalExposure.toFixed(2)), currentExposurePct: snapshot.account?.equity ? Number(((totalExposure / snapshot.account.equity) * 100).toFixed(2)) : 0 },
       timestamp: new Date().toISOString(),
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {

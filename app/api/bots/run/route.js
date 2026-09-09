@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 const PAPER_BASE = 'https://paper-api.alpaca.markets';
 const DATA_BASE = 'https://data.alpaca.markets';
 
-function headers() {
+function alpacaHeaders() {
   return {
     'APCA-API-KEY-ID': process.env.ALPACA_API_KEY || '',
     'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET || '',
@@ -19,7 +19,7 @@ async function jsonFetch(url, options = {}, timeoutMs = 9000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { ...options, headers: { ...headers(), ...(options.headers || {}) }, signal: controller.signal, cache: 'no-store' });
+    const response = await fetch(url, { ...options, headers: { ...alpacaHeaders(), ...(options.headers || {}) }, signal: controller.signal, cache: 'no-store' });
     const text = await response.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = null; }
@@ -30,25 +30,44 @@ async function jsonFetch(url, options = {}, timeoutMs = 9000) {
 
 function authorized(request) {
   if (isDashboardAuthorized(request)) return true;
-  const configured = process.env.CRON_SECRET || process.env.ENGINE_SECRET || '';
-  return matchesSecret(request.headers.get('x-engine-secret'), configured);
+  const expected = process.env.CRON_SECRET || process.env.ENGINE_SECRET || '';
+  return matchesSecret(request.headers.get('x-engine-secret'), expected);
 }
 
-function normalize(value) {
+function keyFor(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function safetyState() {
+  return {
+    multiBotArmed: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
+    paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
+    autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
+    killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
+    liveTrading: process.env.LIVE_TRADING_ENABLED === 'true',
+  };
+}
+
+function entryBlockReason(safety) {
+  if (safety.liveTrading) return 'The multi-bot engine is paper-only and will not run while live trading is enabled.';
+  if (!safety.multiBotArmed) return 'Multi-bot paper execution is not armed. Monitoring and configuration remain available.';
+  if (safety.killSwitch) return 'Global kill switch blocks all new bot entries.';
+  if (!safety.paperExecution) return 'Paper execution is disabled.';
+  if (!safety.autoExecution) return 'Automatic paper execution is disabled.';
+  return '';
 }
 
 async function barsFor(bot) {
   const encoded = encodeURIComponent(bot.symbol);
-  let bars = [];
+  let rows = [];
   if (bot.assetType === 'crypto') {
-    const payload = await jsonFetch(`${DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=5Min&limit=48&sort=asc`);
-    bars = payload?.bars?.[bot.symbol] || payload?.bars?.[normalize(bot.symbol)] || [];
+    const data = await jsonFetch(`${DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encoded}&timeframe=5Min&limit=48&sort=asc`);
+    rows = data?.bars?.[bot.symbol] || data?.bars?.[keyFor(bot.symbol)] || [];
   } else {
-    const payload = await jsonFetch(`${DATA_BASE}/v2/stocks/${encoded}/bars?timeframe=5Min&limit=48&feed=iex&sort=asc`);
-    bars = payload?.bars || [];
+    const data = await jsonFetch(`${DATA_BASE}/v2/stocks/${encoded}/bars?timeframe=5Min&limit=48&feed=iex&sort=asc`);
+    rows = data?.bars || [];
   }
-  return bars.map((bar) => ({ time: bar.t, close: Number(bar.c || 0), high: Number(bar.h || 0), low: Number(bar.l || 0), volume: Number(bar.v || 0) })).filter((bar) => bar.close > 0);
+  return rows.map((bar) => ({ time: bar.t, close: Number(bar.c || 0), high: Number(bar.h || 0), low: Number(bar.l || 0), volume: Number(bar.v || 0) })).filter((bar) => bar.close > 0);
 }
 
 function signalFor(bot, series) {
@@ -58,27 +77,30 @@ function signalFor(bot, series) {
   const first = closes[0];
   const average = closes.reduce((sum, value) => sum + value, 0) / closes.length;
   const recent = closes.slice(-12);
-  const recentHighBeforeCurrent = Math.max(...recent.slice(0, -1));
-  const recentLowBeforeCurrent = Math.min(...recent.slice(0, -1));
+  const priorRange = recent.slice(0, -1);
+  const priorHigh = Math.max(...priorRange);
+  const priorLow = Math.min(...priorRange);
   const momentumPct = first > 0 ? ((current - first) / first) * 100 : 0;
-  const distanceFromAveragePct = average > 0 ? ((current - average) / average) * 100 : 0;
-  const shortAverage = closes.slice(-6).reduce((sum, value) => sum + value, 0) / Math.min(6, closes.length);
-  const priorAverage = closes.slice(-12, -6).reduce((sum, value) => sum + value, 0) / Math.max(1, closes.slice(-12, -6).length);
+  const distancePct = average > 0 ? ((current - average) / average) * 100 : 0;
+  const short = closes.slice(-6);
+  const previous = closes.slice(-12, -6);
+  const shortAverage = short.reduce((sum, value) => sum + value, 0) / Math.max(short.length, 1);
+  const priorAverage = previous.reduce((sum, value) => sum + value, 0) / Math.max(previous.length, 1);
 
   if (bot.strategy === 'momentum') {
     const buy = momentumPct >= 0.6 && current >= shortAverage;
-    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? `Positive 5-minute momentum is ${momentumPct.toFixed(2)}% with price holding above the short average.` : `Momentum is ${momentumPct.toFixed(2)}%; waiting for at least 0.60% with price above the short average.`, score: Math.abs(momentumPct) };
+    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? `Positive 5-minute momentum is ${momentumPct.toFixed(2)}% and price is above the short average.` : `Momentum is ${momentumPct.toFixed(2)}%; waiting for at least 0.60% with price above the short average.`, score: Math.abs(momentumPct) };
   }
   if (bot.strategy === 'trend') {
     const buy = current > average && shortAverage > priorAverage;
-    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? 'Price is above the recent average and the short trend is rising.' : 'Trend confirmation is incomplete; price or the short average has not cleared the recent baseline.', score: Math.abs(distanceFromAveragePct) };
+    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? 'Price is above the recent average and the short trend is rising.' : 'Trend confirmation is incomplete.', score: Math.abs(distancePct) };
   }
   if (bot.strategy === 'mean-reversion') {
-    const buy = distanceFromAveragePct <= -1.0 && current > recentLowBeforeCurrent;
-    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? `Price is ${Math.abs(distanceFromAveragePct).toFixed(2)}% below its recent average and has stabilized above the recent low.` : `Price is ${distanceFromAveragePct.toFixed(2)}% from its average; waiting for a deeper, stabilizing pullback.`, score: Math.abs(distanceFromAveragePct) };
+    const buy = distancePct <= -1 && current > priorLow;
+    return { action: buy ? 'BUY' : 'HOLD', reason: buy ? `Price is ${Math.abs(distancePct).toFixed(2)}% below its recent average and has stabilized above the recent low.` : `Price is ${distancePct.toFixed(2)}% from its average; waiting for a deeper, stabilizing pullback.`, score: Math.abs(distancePct) };
   }
-  const breakoutPct = recentHighBeforeCurrent > 0 ? ((current - recentHighBeforeCurrent) / recentHighBeforeCurrent) * 100 : 0;
-  const buy = current > recentHighBeforeCurrent && breakoutPct >= 0.15;
+  const breakoutPct = priorHigh > 0 ? ((current - priorHigh) / priorHigh) * 100 : 0;
+  const buy = current > priorHigh && breakoutPct >= 0.15;
   return { action: buy ? 'BUY' : 'HOLD', reason: buy ? `Price broke the recent range by ${breakoutPct.toFixed(2)}%.` : 'No confirmed break above the recent range yet.', score: Math.abs(breakoutPct) };
 }
 
@@ -89,13 +111,7 @@ async function accountSnapshot() {
   ]);
   const equity = Number(account.equity || 0);
   const lastEquity = Number(account.last_equity || equity || 0);
-  return {
-    account,
-    equity,
-    cash: Number(account.cash || 0),
-    dayPnl: Number((equity - lastEquity).toFixed(2)),
-    positions: positions || [],
-  };
+  return { account, equity, cash: Number(account.cash || 0), dayPnl: Number((equity - lastEquity).toFixed(2)), positions: positions || [] };
 }
 
 async function reconcileFills(bot) {
@@ -134,36 +150,22 @@ async function audit(bot, eventType, status, message, metadata = {}) {
 
 export async function POST(request) {
   if (!authorized(request)) return Response.json({ error: 'Invalid engine access token.' }, { status: 401 });
-  if (process.env.LIVE_TRADING_ENABLED === 'true') return Response.json({ error: 'Multi-bot engine is paper-only and will not run while live trading is enabled.' }, { status: 409 });
   if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return Response.json({ error: 'Alpaca paper credentials are not configured.' }, { status: 400 });
 
   const bots = (await loadBots()).filter((bot) => bot.status === 'running');
-  const safety = {
-    paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
-    autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
-    killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-  };
-
-  if (safety.killSwitch || !safety.paperExecution || !safety.autoExecution) {
-    return Response.json({
-      ok: true,
-      blocked: true,
-      safety,
-      runningBots: bots.length,
-      message: safety.killSwitch ? 'Global kill switch blocks all new bot entries.' : !safety.paperExecution ? 'Paper execution is disabled.' : 'Automatic paper execution is disabled.',
-    });
-  }
+  const safety = safetyState();
+  const blocked = entryBlockReason(safety);
+  if (blocked) return Response.json({ ok: true, blocked: true, safety, runningBots: bots.length, message: blocked });
 
   const snapshot = await accountSnapshot();
   const shared = sharedRiskLimits(snapshot.equity);
   const dailyLossUsd = Math.max(-snapshot.dayPnl, 0);
-  const totalExposure = () => snapshot.positions.reduce((sum, position) => sum + Math.abs(Number(position.market_value || 0)), 0);
   const results = [];
   const claimedSymbols = new Set();
 
   for (const bot of bots.slice(0, 20)) {
     try {
-      const key = normalize(bot.symbol);
+      const key = keyFor(bot.symbol);
       if (claimedSymbols.has(key)) {
         await audit(bot, 'BOT_REJECT', 'REJECTED', 'Another running bot already owns this symbol for the current cycle. Duplicate active symbols are blocked.');
         results.push({ botId: bot.id, action: 'REJECT', reason: 'duplicate active symbol' });
@@ -178,19 +180,16 @@ export async function POST(request) {
       }
 
       const activity = await reconcileFills(bot);
-      const qtyOwned = ownedQty(activity);
-      const position = snapshot.positions.find((item) => normalize(item.symbol) === key);
+      const botQty = ownedQty(activity);
+      const position = snapshot.positions.find((item) => keyFor(item.symbol) === key);
 
-      if (position && qtyOwned > 0) {
+      if (position && botQty > 0) {
         const plpc = Number(position.unrealized_plpc || 0) * 100;
         const exitReason = plpc <= -bot.stopLossPct ? `${bot.stopLossPct}% stop-loss reached` : plpc >= bot.takeProfitPct ? `${bot.takeProfitPct}% take-profit reached` : '';
         if (exitReason) {
-          const qty = Math.min(qtyOwned, Math.max(Number(position.qty || 0), 0));
+          const qty = Math.min(botQty, Math.max(Number(position.qty || 0), 0));
           if (qty > 0) {
-            const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, {
-              method: 'POST',
-              body: JSON.stringify({ symbol: bot.symbol, side: 'sell', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', qty: String(qty), client_order_id: `ce-${bot.id.slice(0, 8)}-exit-${Date.now()}`.slice(0, 48) }),
-            });
+            const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, { method: 'POST', body: JSON.stringify({ symbol: bot.symbol, side: 'sell', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', qty: String(qty), client_order_id: `ce-${bot.id.slice(0, 8)}-exit-${Date.now()}`.slice(0, 48) }) });
             await writeBotEvent({ botId: bot.id, eventType: 'BOT_EXIT', status: 'ACCEPTED', symbol: bot.symbol, side: 'SELL', orderId: order.id, message: `${exitReason}; submitted a paper exit for ${qty} ${bot.symbol}.`, metadata: { qty, unrealizedPlpc: plpc } });
             results.push({ botId: bot.id, action: 'EXIT', orderId: order.id });
             continue;
@@ -201,7 +200,7 @@ export async function POST(request) {
         continue;
       }
 
-      if (position && qtyOwned <= 0) {
+      if (position && botQty <= 0) {
         await audit(bot, 'BOT_REJECT', 'REJECTED', 'A broker position already exists for this symbol but was not opened by this bot. The bot will not take ownership of a manual or other-bot position.');
         results.push({ botId: bot.id, action: 'REJECT', reason: 'unowned existing position' });
         continue;
@@ -213,8 +212,9 @@ export async function POST(request) {
         continue;
       }
 
-      const projectedExposure = totalExposure() + bot.tradeAmount;
-      if (snapshot.equity > 0 && (projectedExposure / snapshot.equity) * 100 > shared.maxAggregateExposurePct) {
+      const exposure = snapshot.positions.reduce((sum, item) => sum + Math.abs(Number(item.market_value || 0)), 0);
+      const projectedExposurePct = snapshot.equity > 0 ? ((exposure + bot.tradeAmount) / snapshot.equity) * 100 : 100;
+      if (projectedExposurePct > shared.maxAggregateExposurePct) {
         await audit(bot, 'BOT_REJECT', 'REJECTED', `Shared bot exposure would exceed ${shared.maxAggregateExposurePct}% of paper equity.`);
         results.push({ botId: bot.id, action: 'REJECT', reason: 'shared exposure limit' });
         continue;
@@ -250,7 +250,7 @@ export async function POST(request) {
           maxPositionPct: shared.maxPositionPct,
           maxDailyLossPct: shared.maxDailyLossPct,
           maxDailyLossUsd: Math.min(shared.maxDailyLossUsd, bot.maxDailyLossUsd),
-          maxOpenPositions: Math.min(shared.maxOpenPositions, bot.maxPositions),
+          maxOpenPositions: shared.maxOpenPositions,
           minOrderNotional: 1,
           staleMinutes: 9999,
         },
@@ -261,10 +261,7 @@ export async function POST(request) {
         continue;
       }
 
-      const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, {
-        method: 'POST',
-        body: JSON.stringify({ symbol: bot.symbol, side: 'buy', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', notional: String(notional), client_order_id: `ce-${bot.id.slice(0, 8)}-buy-${Date.now()}`.slice(0, 48) }),
-      });
+      const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, { method: 'POST', body: JSON.stringify({ symbol: bot.symbol, side: 'buy', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', notional: String(notional), client_order_id: `ce-${bot.id.slice(0, 8)}-buy-${Date.now()}`.slice(0, 48) }) });
       await writeBotEvent({ botId: bot.id, eventType: 'BOT_ORDER', status: 'ACCEPTED', symbol: bot.symbol, side: 'BUY', orderId: order.id, message: `${bot.strategy} signal passed shared risk checks; submitted a $${notional.toFixed(2)} paper buy.`, metadata: { notional, strategy: bot.strategy, signal } });
       results.push({ botId: bot.id, action: 'BUY', orderId: order.id, notional });
     } catch (error) {
