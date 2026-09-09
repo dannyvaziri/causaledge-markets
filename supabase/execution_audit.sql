@@ -13,11 +13,16 @@ create table if not exists public.execution_audit (
 
 create index if not exists execution_audit_created_at_idx on public.execution_audit (created_at desc);
 create index if not exists execution_audit_order_id_idx on public.execution_audit (order_id);
+create index if not exists execution_audit_bot_id_idx on public.execution_audit ((metadata->>'botId')) where metadata ? 'botId';
+create index if not exists execution_audit_event_type_idx on public.execution_audit (event_type, created_at desc);
 
 alter table public.execution_audit enable row level security;
-
 revoke all on public.execution_audit from anon, authenticated;
 
+-- Legacy single-bot table retained for backward compatibility. The multi-bot workspace
+-- persists bot configuration changes as append-only BOT_CONFIG/BOT_DELETE events in
+-- execution_audit, allowing configuration and per-bot audit history to share one
+-- server-only event store without exposing Supabase credentials to browser code.
 create table if not exists public.bot_configs (
   id integer primary key default 1 check (id = 1),
   symbol text not null default 'SPY', active boolean not null default false,
