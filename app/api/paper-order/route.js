@@ -31,6 +31,7 @@ export async function POST(request) {
   }
 
   const symbol = String(body.symbol || '').toUpperCase();
+  const assetType = body.assetType === 'crypto' ? 'crypto' : 'stock';
   const side = String(body.side || '').toUpperCase();
   const source = body.source === 'auto' ? 'auto' : 'manual';
   const qty = Number(body.qty || 0);
@@ -50,6 +51,7 @@ export async function POST(request) {
 
     const risk = evaluateRisk({
       symbol,
+      assetType,
       side,
       qty,
       notional,
