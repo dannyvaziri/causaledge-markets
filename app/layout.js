@@ -2,10 +2,11 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles/base.css';
 import './styles/panels.css';
 import './styles/overlays.css';
+import './styles/consumer.css';
 
 export const metadata = {
-  title: 'CausalEdge Markets | Global Market Intelligence',
-  description: 'Live global intelligence, market monitoring, AI dossiers, and autonomous paper trading with deterministic risk controls.',
+  title: 'CausalEdge Markets | Invest with context',
+  description: 'A consumer investing research experience with portfolio context, transparent strategies, AI explanations, and global market intelligence.',
 };
 
 export default function RootLayout({ children }) {
