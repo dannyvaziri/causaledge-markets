@@ -64,6 +64,7 @@ LIVE_TRADING_ENABLED=false
 # Supabase execution audit database (server-side only)
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
+SUPABASE_API_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
