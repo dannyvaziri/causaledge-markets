@@ -18,4 +18,14 @@ alter table public.execution_audit enable row level security;
 
 revoke all on public.execution_audit from anon, authenticated;
 
+create table if not exists public.bot_configs (
+  id integer primary key default 1 check (id = 1),
+  symbol text not null default 'SPY', active boolean not null default false,
+  notional numeric not null default 10, stop_loss_pct numeric not null default 3,
+  take_profit_pct numeric not null default 6, max_daily_loss_usd numeric not null default 3,
+  updated_at timestamptz not null default now()
+);
+alter table public.bot_configs enable row level security;
+revoke all on public.bot_configs from anon, authenticated;
+
 -- The server writes through SUPABASE_SERVICE_ROLE_KEY. No client role may read or write audit records.

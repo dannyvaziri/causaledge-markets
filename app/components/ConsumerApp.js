@@ -145,6 +145,8 @@ export default function ConsumerApp({ token, user, onLock }) {
   const [manualAmount, setManualAmount] = useState('');
   const [manualSide, setManualSide] = useState('BUY');
   const [manualOrder, setManualOrder] = useState(null);
+  const [bot, setBot] = useState({ symbol: 'SPY', active: false, notional: 10, stopLossPct: 3, takeProfitPct: 6 });
+  const [botBusy, setBotBusy] = useState(false);
   const [messages, setMessages] = useState([{ role: 'assistant', text: 'Ask me what changed, what matters to your holdings, or what a market event could mean. I will explain the evidence and tradeoffs without placing trades.' }]);
 
   const headers = useCallback((extra = {}) => ({ ...extra, ...(token ? { 'x-ce-token': token } : {}) }), [token]);
@@ -166,9 +168,17 @@ export default function ConsumerApp({ token, user, onLock }) {
     try { const saved = localStorage.getItem(PROFILE_KEY); setProfile(saved ? JSON.parse(saved) : null); } catch { setProfile(null); }
     setProfileReady(true);
     refresh();
+    api('/api/bot/config').then((result) => { if (result.bot) setBot({ symbol: result.bot.symbol, active: Boolean(result.bot.active), notional: result.bot.notional, stopLossPct: result.bot.stop_loss_pct ?? result.bot.stopLossPct ?? 3, takeProfitPct: result.bot.take_profit_pct ?? result.bot.takeProfitPct ?? 6 }); }).catch(() => {});
     const timer = setInterval(refresh, 60000);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  const saveBot = async (active) => {
+    setBotBusy(true);
+    try { const result = await api('/api/bot/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bot, active }) }); setBot({ symbol: result.bot.symbol, active: Boolean(result.bot.active), notional: result.bot.notional, stopLossPct: result.bot.stop_loss_pct, takeProfitPct: result.bot.take_profit_pct }); setError(''); }
+    catch (caught) { setError(String(caught?.message || caught)); }
+    finally { setBotBusy(false); }
+  };
 
   const saveProfile = (next) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); setProfile(next);
@@ -272,6 +282,7 @@ export default function ConsumerApp({ token, user, onLock }) {
       {tab === 'invest' && <>
         <section className="ceSectionHead"><div><p className="ceEyebrow">STRATEGIES</p><h1>Investing ideas you can understand.</h1><p>Explore transparent research baskets. Nothing here places an order.</p></div><button className="ceSecondary" onClick={() => { localStorage.removeItem(PROFILE_KEY); setProfile(null); }}>Update my goals</button></section>
         <section className="ceCard ceTradeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PAPER TRADE</p><h2>Place an order</h2></div><span className="cePaperPill">PAPER ONLY</span></div><p className="ceTradeHint">Buy with a dollar amount or sell shares you already own. Every order passes the account limits and kill switch first.</p><form className="ceTradeForm" onSubmit={submitManualOrder}><label><span>Symbol</span><input value={manualSymbol} onChange={(event) => setManualSymbol(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={10} autoCapitalize="characters"/></label><label><span>Action</span><select value={manualSide} onChange={(event) => setManualSide(event.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label><label><span>{manualSide === 'BUY' ? 'Dollars' : 'Shares'}</span><input type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} placeholder={manualSide === 'BUY' ? '25.00' : '1'}/></label><button className="cePrimary" disabled={busy === 'manual-order'}>{busy === 'manual-order' ? 'Submitting…' : `${manualSide === 'BUY' ? 'Buy' : 'Sell'} in paper`}</button></form>{manualOrder && <div className={manualOrder.ok ? 'ceTradeResult ok' : 'ceTradeResult error'}>{manualOrder.message}</div>}</section>
+        <section className="ceCard ceBotCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PAPER BOT</p><h2>Run a strategy on one stock</h2></div><span className={bot.active ? 'ceBotStatus on' : 'cePaperPill'}>{bot.active ? 'RUNNING' : 'PAUSED'}</span></div><p className="ceTradeHint">Choose a recommended symbol or enter any stock. The scheduled paper engine uses these limits and remains subject to CausalEdge risk checks.</p><div className="ceBotForm"><label><span>Stock symbol</span><input value={bot.symbol} onChange={(event) => setBot((value) => ({ ...value, symbol: event.target.value.toUpperCase() }))} placeholder="SPY" maxLength={10}/></label><label><span>Max dollars per trade</span><input type="number" min="1" max="25" step="1" value={bot.notional} onChange={(event) => setBot((value) => ({ ...value, notional: event.target.value }))}/></label><label><span>Stop loss %</span><input type="number" min="0.5" max="10" step="0.5" value={bot.stopLossPct} onChange={(event) => setBot((value) => ({ ...value, stopLossPct: event.target.value }))}/></label><label><span>Take profit %</span><input type="number" min="1" max="20" step="0.5" value={bot.takeProfitPct} onChange={(event) => setBot((value) => ({ ...value, takeProfitPct: event.target.value }))}/></label></div><div className="ceBotActions"><button className="cePrimary" disabled={botBusy} onClick={() => saveBot(true)}>{botBusy ? 'Saving…' : bot.active ? 'Save bot settings' : 'Start paper bot'}</button>{bot.active && <button className="ceSecondary" disabled={botBusy} onClick={() => saveBot(false)}>Pause bot</button>}</div></section>
         <div className="ceStrategyGrid">{STRATEGIES.map((strategy) => <StrategyCard key={strategy.id} strategy={strategy} recommended={recommended.id === strategy.id} onOpen={setSelectedStrategy}/>)}</div>
         <section className="ceCard ceHoldingsCard"><div className="ceCardTitle"><div><p className="ceEyebrow">YOUR PAPER HOLDINGS</p><h2>What you own</h2></div><span className="cePaperPill">READ ONLY</span></div>{positions.length ? <div className="ceHoldingsTable">{positions.map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} shares</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)} unrealized</small></span></div>)}</div> : <div className="ceEmpty"><b>No paper positions.</b><span>Use strategies as research templates before deciding what you want to test in paper mode.</span></div>}</section>
         <section className="cePlanCard"><div><p className="ceEyebrow">RECURRING PLAN</p><h2>{money(profile.monthly)} / month</h2><p>Your goal profile is planning around this monthly amount. Recurring execution is intentionally not enabled from this consumer experience.</p></div><span className="ceLocked">🔒 Execution locked</span></section>

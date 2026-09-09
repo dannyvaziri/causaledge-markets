@@ -1,6 +1,7 @@
 import { isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
 import { aiConfigured, requestStructured } from '../../../lib/ai.js';
 import { evaluateRisk } from '../../../lib/risk.js';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,13 @@ const WATCHLIST = (process.env.CHALLENGE_WATCHLIST || 'AAPL,MSFT,NVDA,AMZN,META,
 
 const runtime = globalThis.__signalForgeEngine || { paused: false, logs: [], seen: new Set(), lastRun: null };
 globalThis.__signalForgeEngine = runtime;
+async function botConfig() {
+  try {
+    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_API_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data } = await client.from('bot_configs').select('*').eq('id', 1).maybeSingle();
+    return data || { active: false };
+  } catch { return { active: false }; }
+}
 
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function now() { return new Date().toISOString(); }
@@ -207,15 +215,17 @@ async function runCycle() {
   const dailyLossUsd = Math.max(-Number(snapshot.account.dayPnl || 0), 0);
   if (dailyLossUsd >= guard.maxDailyLossUsd) { log('REJECT', `Daily loss stop reached (${dailyLossUsd.toFixed(2)}).`); return snapshot; }
 
+  const bot = await botConfig();
   for (const position of snapshot.positions) {
-    if (position.unrealizedPlpc <= -0.03) { await closePosition(position, '3% protective stop reached'); return accountSnapshot(); }
-    if (position.unrealizedPlpc >= 0.06) { await closePosition(position, '6% profit target reached'); return accountSnapshot(); }
+    if (position.unrealizedPlpc <= -(Number(bot.stop_loss_pct || 3) / 100)) { await closePosition(position, `${Number(bot.stop_loss_pct || 3)}% protective stop reached`); return accountSnapshot(); }
+    if (position.unrealizedPlpc >= (Number(bot.take_profit_pct || 6) / 100)) { await closePosition(position, `${Number(bot.take_profit_pct || 6)}% profit target reached`); return accountSnapshot(); }
   }
 
   if (snapshot.positions.length >= guard.maxOpenPositions) { log('HOLD', 'Maximum open-position count reached.'); return snapshot; }
 
   const news = await getRecentNews();
   const candidate = await chooseCandidate(news);
+  if (bot.active && bot.symbol) candidate.symbol = String(bot.symbol).toUpperCase();
   if (candidate.signal !== 'BUY' || candidate.confidence < guard.minConfidence || candidate.impact < guard.minImpact) {
     log('HOLD', `${candidate.reason || 'No qualifying catalyst.'} · confidence ${Number(candidate.confidence || 0).toFixed(0)} · impact ${Number(candidate.impact || 0).toFixed(1)}`, candidate.symbol || '');
     return snapshot;
@@ -231,7 +241,7 @@ async function runCycle() {
 
   const ageSource = news.find((n) => String(n.id) === intelligenceId);
   const ageMinutes = ageSource ? Math.max((Date.now() - Date.parse(ageSource.created_at)) / 60000, 0) : 99;
-  const notional = Number(Math.min(guard.maxOrderNotional, snapshot.account.cash, snapshot.account.equity * 0.25).toFixed(2));
+  const notional = Number(Math.min(guard.maxOrderNotional, Number(bot.notional || guard.maxOrderNotional), snapshot.account.cash, snapshot.account.equity * 0.25).toFixed(2));
   const risk = evaluateRisk({
     symbol: candidate.symbol, side: 'BUY', notional, qty: 0, source: 'auto',
     equity: snapshot.account.equity, currentPositionValue: 0, currentQty: 0,
