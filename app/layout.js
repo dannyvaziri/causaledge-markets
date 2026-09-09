@@ -3,10 +3,11 @@ import './styles/base.css';
 import './styles/panels.css';
 import './styles/overlays.css';
 import './styles/consumer.css';
+import './styles/bots.css';
 
 export const metadata = {
-  title: 'CausalEdge Markets | Invest with context',
-  description: 'A consumer investing research experience with portfolio context, transparent strategies, AI explanations, and global market intelligence.',
+  title: 'CausalEdge Markets | Multi-Bot Paper Investing',
+  description: 'A paper-only investing workspace with independent stock and crypto bots, shared account risk controls, AI explanations, and global market intelligence.',
 };
 
 export default function RootLayout({ children }) {

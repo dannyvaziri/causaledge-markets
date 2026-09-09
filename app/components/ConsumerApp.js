@@ -2,122 +2,41 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import IntelligenceCommandCenter from './IntelligenceCommandCenter';
+import MultiBotWorkspace from './MultiBotWorkspace';
 import { money, pct, shortTime, typeLabel } from '../lib/format.js';
 
 const PROFILE_KEY = 'causaledge-investor-profile-v1';
-
-const STRATEGIES = [
-  {
-    id: 'steady-growth', name: 'Steady Growth', tag: 'Core', risk: 'Moderate', horizon: '5+ years',
-    description: 'A diversified core built around broad U.S. equities, quality companies and a stabilizing bond sleeve.',
-    allocations: [['VTI', 55], ['QQQM', 15], ['SCHD', 15], ['BND', 15]],
-    themes: ['Long-term wealth', 'Diversification'],
-    why: 'A simple foundation for investors who want growth without concentrating the entire portfolio in one theme.'
-  },
-  {
-    id: 'ai-semiconductors', name: 'AI & Semiconductors', tag: 'Theme', risk: 'High', horizon: '5+ years',
-    description: 'Companies positioned across chips, cloud infrastructure and the AI compute stack.',
-    allocations: [['NVDA', 25], ['AMD', 20], ['MSFT', 20], ['GOOGL', 15], ['AMZN', 10], ['AVGO', 10]],
-    themes: ['AI', 'Technology'],
-    why: 'Targets the infrastructure and platform layer behind AI adoption while spreading exposure across several businesses.'
-  },
-  {
-    id: 'global-resilience', name: 'Global Resilience', tag: 'CausalEdge', risk: 'Moderate', horizon: '3+ years',
-    description: 'A research basket focused on defense, energy, logistics and companies tied to resilient supply chains.',
-    allocations: [['LMT', 20], ['RTX', 20], ['XOM', 15], ['CVX', 15], ['CAT', 15], ['UPS', 15]],
-    themes: ['Geopolitics', 'Supply chains', 'Energy'],
-    why: 'Uses the same geopolitical and supply-chain intelligence CausalEdge monitors to organize a research theme.'
-  },
-  {
-    id: 'income-quality', name: 'Income & Quality', tag: 'Core', risk: 'Lower', horizon: '3+ years',
-    description: 'A lower-volatility research mix emphasizing dividends, profitable businesses and broad diversification.',
-    allocations: [['SCHD', 45], ['VIG', 25], ['VTI', 20], ['BND', 10]],
-    themes: ['Income', 'Quality'],
-    why: 'Designed for investors who value steadier compounding and income over chasing the highest-growth names.'
-  },
-  {
-    id: 'mega-cap', name: 'Mega-Cap Leaders', tag: 'Theme', risk: 'High', horizon: '5+ years',
-    description: 'A concentrated research basket of the largest technology and platform companies in the watchlist.',
-    allocations: [['MSFT', 20], ['AAPL', 20], ['NVDA', 20], ['AMZN', 15], ['GOOGL', 15], ['META', 10]],
-    themes: ['Technology', 'Growth'],
-    why: 'Simple exposure to businesses with major cash flows, platform advantages and strong index influence.'
-  },
-  {
-    id: 'market-core', name: 'One-Fund Market Core', tag: 'Simple', risk: 'Moderate', horizon: '5+ years',
-    description: 'The simplest starting point: broad-market exposure as a single research allocation.',
-    allocations: [['VTI', 100]],
-    themes: ['Simple', 'Diversification'],
-    why: 'Useful as a benchmark for every more complex strategy: does the added complexity actually improve the plan?'
-  }
-];
-
-const QUICK_QUESTIONS = [
-  'What moved my portfolio today?',
-  'What world events matter most to my holdings?',
-  'Explain my biggest position in plain English.',
-  'What risks should I watch this week?',
-  'How diversified is my paper portfolio?'
-];
-
 const SYMBOL_OPTIONS = [
-  ['AAPL', 'Apple'], ['MSFT', 'Microsoft'], ['NVDA', 'NVIDIA'], ['AMZN', 'Amazon'], ['GOOGL', 'Alphabet'], ['META', 'Meta'], ['TSLA', 'Tesla'], ['AMD', 'AMD'], ['SPY', 'S&P 500 ETF'], ['QQQ', 'Nasdaq 100 ETF'], ['VTI', 'Total Market ETF'], ['SCHD', 'Dividend ETF'], ['BTC/USD', 'Bitcoin'], ['ETH/USD', 'Ethereum'], ['SOL/USD', 'Solana'], ['DOGE/USD', 'Dogecoin']
+  ['AAPL', 'Apple'], ['MSFT', 'Microsoft'], ['NVDA', 'NVIDIA'], ['AMZN', 'Amazon'], ['GOOGL', 'Alphabet'], ['META', 'Meta'], ['TSLA', 'Tesla'], ['AMD', 'AMD'], ['SPY', 'S&P 500 ETF'], ['QQQ', 'Nasdaq 100 ETF'], ['VTI', 'Total Market ETF'], ['SCHD', 'Dividend ETF'],
+  ['BTC/USD', 'Bitcoin'], ['ETH/USD', 'Ethereum'], ['SOL/USD', 'Solana'], ['DOGE/USD', 'Dogecoin'], ['AVAX/USD', 'Avalanche'], ['LINK/USD', 'Chainlink']
+];
+const QUICK_QUESTIONS = [
+  'What moved my paper portfolio today?',
+  'What do my active bots plan to check next?',
+  'What global events matter most to my holdings?',
+  'Explain my biggest risk in plain English.',
 ];
 
 function safeNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function Onboarding({ brokerConnected, onComplete }) {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({
-    goal: 'Build long-term wealth', target: '1000', horizon: '5-10 years', risk: 'Moderate', monthly: '100', interests: ['AI', 'Geopolitics']
-  });
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const toggleInterest = (value) => setForm((current) => ({
-    ...current,
-    interests: current.interests.includes(value) ? current.interests.filter((item) => item !== value) : [...current.interests, value]
-  }));
-  const finish = () => onComplete({
-    ...form,
-    target: Math.max(safeNumber(form.target, 1000), 1),
-    monthly: Math.max(safeNumber(form.monthly, 0), 0),
-    createdAt: new Date().toISOString()
-  });
-
-  return <main className="ceOnboarding">
-    <section className="ceOnboardCard">
-      <div className="ceOnboardBrand"><span>CE</span><div><b>CausalEdge Markets</b><small>Invest with context, not noise.</small></div></div>
-      <div className="ceStepTrack"><i className={step >= 1 ? 'on' : ''}/><i className={step >= 2 ? 'on' : ''}/><i className={step >= 3 ? 'on' : ''}/></div>
-      {step === 1 && <div className="ceOnboardBody">
-        <p className="ceEyebrow">STEP 1 OF 3</p><h1>What are you investing for?</h1><p>We use this to organize your dashboard and explain progress. It does not authorize trades.</p>
-        <div className="ceChoiceGrid">{['Build long-term wealth','Retirement','A major purchase','Learn by paper investing'].map((goal) => <button key={goal} className={form.goal === goal ? 'selected' : ''} onClick={() => set('goal', goal)}>{goal}</button>)}</div>
-        <label className="ceField"><span>Goal value</span><div><b>$</b><input inputMode="decimal" value={form.target} onChange={(event) => set('target', event.target.value.replace(/[^0-9.]/g, ''))}/></div></label>
-      </div>}
-      {step === 2 && <div className="ceOnboardBody">
-        <p className="ceEyebrow">STEP 2 OF 3</p><h1>How do you want to approach risk?</h1><p>CausalEdge will use this to rank research strategies and explain tradeoffs, not to execute anything automatically.</p>
-        <label className="ceField"><span>Time horizon</span><select value={form.horizon} onChange={(event) => set('horizon', event.target.value)}><option>Under 3 years</option><option>3-5 years</option><option>5-10 years</option><option>10+ years</option></select></label>
-        <div className="ceRiskChoices">{[['Lower','Smaller swings, more stability'],['Moderate','Balance growth and stability'],['High','Accept larger swings for growth']].map(([risk, copy]) => <button key={risk} className={form.risk === risk ? 'selected' : ''} onClick={() => set('risk', risk)}><b>{risk}</b><small>{copy}</small></button>)}</div>
-      </div>}
-      {step === 3 && <div className="ceOnboardBody">
-        <p className="ceEyebrow">STEP 3 OF 3</p><h1>Make it yours.</h1><p>Choose themes you want CausalEdge to prioritize when explaining markets and surfacing research.</p>
-        <label className="ceField"><span>Monthly amount to plan around</span><div><b>$</b><input inputMode="decimal" value={form.monthly} onChange={(event) => set('monthly', event.target.value.replace(/[^0-9.]/g, ''))}/></div></label>
-        <div className="ceChipChoices">{['AI','Technology','Geopolitics','Energy','Income','Supply chains','Defense','Simple'].map((interest) => <button key={interest} className={form.interests.includes(interest) ? 'selected' : ''} onClick={() => toggleInterest(interest)}>{interest}</button>)}</div>
-        <div className="ceConnectionCheck"><span className={brokerConnected ? 'ok' : ''}>{brokerConnected ? '✓' : '○'}</span><div><b>{brokerConnected ? 'Alpaca paper account connected' : 'Paper broker not connected yet'}</b><small>{brokerConnected ? 'Account data can be used for portfolio explanations.' : 'You can connect a paper account later from the app.'}</small></div></div>
-      </div>}
-      <div className="ceOnboardActions"><button className="ceSecondary" onClick={() => step === 1 ? finish() : setStep((value) => value - 1)}>{step === 1 ? 'Use these defaults' : 'Back'}</button><button className="cePrimary" onClick={() => step === 3 ? finish() : setStep((value) => value + 1)}>{step === 3 ? 'Open my dashboard' : 'Continue'}</button></div>
-      <small className="ceFinePrint">Paper investing and educational research only. CausalEdge does not enable live-money trading from this onboarding flow.</small>
-    </section>
-  </main>;
+  const [form, setForm] = useState({ goal: 'Learn with paper investing', target: '1000', horizon: '5-10 years', risk: 'Moderate', monthly: '100' });
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const finish = () => onComplete({ ...form, target: Math.max(safeNumber(form.target, 1000), 1), monthly: Math.max(safeNumber(form.monthly, 0), 0), createdAt: new Date().toISOString() });
+  return <main className="ceOnboarding"><section className="ceOnboardCard"><div className="ceOnboardBrand"><span>CE</span><div><b>CausalEdge Markets</b><small>Paper automation with account-level guardrails.</small></div></div><div className="ceStepTrack"><i className={step >= 1 ? 'on' : ''}/><i className={step >= 2 ? 'on' : ''}/><i className={step >= 3 ? 'on' : ''}/></div>
+    {step === 1 && <div className="ceOnboardBody"><p className="ceEyebrow">STEP 1 OF 3</p><h1>What are you using CausalEdge for?</h1><p>This organizes your dashboard. It never authorizes live trading.</p><div className="ceChoiceGrid">{['Learn with paper investing','Build long-term wealth','Test automated strategies','Understand market risk'].map((goal) => <button key={goal} className={form.goal === goal ? 'selected' : ''} onClick={() => update('goal', goal)}>{goal}</button>)}</div><label className="ceField"><span>Paper goal value</span><div><b>$</b><input inputMode="decimal" value={form.target} onChange={(event) => update('target', event.target.value.replace(/[^0-9.]/g, ''))}/></div></label></div>}
+    {step === 2 && <div className="ceOnboardBody"><p className="ceEyebrow">STEP 2 OF 3</p><h1>Set your risk context.</h1><p>Bot-level settings can be stricter, but shared account limits always win.</p><label className="ceField"><span>Time horizon</span><select value={form.horizon} onChange={(event) => update('horizon', event.target.value)}><option>Under 3 years</option><option>3-5 years</option><option>5-10 years</option><option>10+ years</option></select></label><div className="ceRiskChoices">{[['Lower','Prefer smaller swings'],['Moderate','Balance testing and caution'],['High','Accept larger paper volatility']].map(([risk, copy]) => <button key={risk} className={form.risk === risk ? 'selected' : ''} onClick={() => update('risk', risk)}><b>{risk}</b><small>{copy}</small></button>)}</div></div>}
+    {step === 3 && <div className="ceOnboardBody"><p className="ceEyebrow">STEP 3 OF 3</p><h1>Confirm your paper workspace.</h1><p>Multiple bots share one account, so combined exposure and daily-loss limits apply across all of them.</p><label className="ceField"><span>Monthly amount to plan around</span><div><b>$</b><input inputMode="decimal" value={form.monthly} onChange={(event) => update('monthly', event.target.value.replace(/[^0-9.]/g, ''))}/></div></label><div className="ceConnectionCheck"><span className={brokerConnected ? 'ok' : ''}>{brokerConnected ? '✓' : '○'}</span><div><b>{brokerConnected ? 'Alpaca paper account connected' : 'Paper broker not connected yet'}</b><small>{brokerConnected ? 'Your account can power bot monitoring and paper-only testing.' : 'Connect a paper account before bot testing.'}</small></div></div></div>}
+    <div className="ceOnboardActions"><button className="ceSecondary" onClick={() => step === 1 ? finish() : setStep((value) => value - 1)}>{step === 1 ? 'Use defaults' : 'Back'}</button><button className="cePrimary" onClick={() => step === 3 ? finish() : setStep((value) => value + 1)}>{step === 3 ? 'Open workspace' : 'Continue'}</button></div><small className="ceFinePrint">Paper trading only. Live-money trading remains disabled.</small></section></main>;
 }
 
 function Header({ tab, setTab, user, onLock }) {
   const nav = [['home','Home'],['invest','Invest'],['ai','AI'],['activity','Activity']];
-  return <header className="ceHeader">
-    <button className="ceBrand" onClick={() => setTab('home')}><span>CE</span><div><b>CausalEdge</b><small>Markets</small></div></button>
-    <nav className="ceDesktopNav">{nav.map(([id, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}</nav>
-    <div className="ceHeaderRight"><span className="cePaperPill">PAPER</span><button className="ceAccountButton" title={user?.email || 'Account'} onClick={onLock}>{user?.picture ? <img src={user.picture} alt=""/> : <span>{String(user?.name || user?.email || 'U').slice(0,1).toUpperCase()}</span>}<b>Sign out</b></button></div>
-  </header>;
+  return <header className="ceHeader"><button className="ceBrand" onClick={() => setTab('home')}><span>CE</span><div><b>CausalEdge</b><small>Markets</small></div></button><nav className="ceDesktopNav">{nav.map(([id, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}</nav><div className="ceHeaderRight"><span className="cePaperPill">PAPER</span><button className="ceAccountButton" title={user?.email || 'Account'} onClick={onLock}>{user?.picture ? <img src={user.picture} alt=""/> : <span>{String(user?.name || user?.email || 'U').slice(0,1).toUpperCase()}</span>}<b>Sign out</b></button></div></header>;
 }
 
 function MobileNav({ tab, setTab }) {
@@ -125,40 +44,29 @@ function MobileNav({ tab, setTab }) {
   return <nav className="ceMobileNav">{nav.map(([id, icon, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><span>{icon}</span><small>{label}</small></button>)}</nav>;
 }
 
-function StrategyCard({ strategy, recommended, onOpen }) {
-  return <button className="ceStrategyCard" onClick={() => onOpen(strategy)}>
-    <div className="ceStrategyTop"><span className="ceStrategyTag">{strategy.tag}</span>{recommended && <span className="ceRecommended">Recommended</span>}</div>
-    <h3>{strategy.name}</h3><p>{strategy.description}</p>
-    <div className="ceStrategyMeta"><span><small>Risk</small><b>{strategy.risk}</b></span><span><small>Horizon</small><b>{strategy.horizon}</b></span></div>
-    <div className="ceMiniAlloc">{strategy.allocations.slice(0,4).map(([symbol, allocation]) => <span key={symbol}>{symbol} {allocation}%</span>)}</div>
-  </button>;
-}
-
 export default function ConsumerApp({ token, user, onLock }) {
   const [tab, setTab] = useState('home');
+  const [intelligence, setIntelligence] = useState(false);
   const [engine, setEngine] = useState(null);
   const [intel, setIntel] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileReady, setProfileReady] = useState(false);
-  const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState([{ role: 'assistant', text: 'Ask me about your paper account, market risk, or what your bots are designed to check. I cannot enable live trading.' }]);
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualAmount, setManualAmount] = useState('');
   const [manualSide, setManualSide] = useState('BUY');
   const [manualAsset, setManualAsset] = useState('stock');
   const [manualOrder, setManualOrder] = useState(null);
-  const [bot, setBot] = useState({ symbol: 'SPY', active: false, notional: 10, stopLossPct: 3, takeProfitPct: 6 });
-  const [botBusy, setBotBusy] = useState(false);
-  const [messages, setMessages] = useState([{ role: 'assistant', text: 'Ask me what changed, what matters to your holdings, or what a market event could mean. I will explain the evidence and tradeoffs without placing trades.' }]);
 
   const headers = useCallback((extra = {}) => ({ ...extra, ...(token ? { 'x-ce-token': token } : {}) }), [token]);
   const api = useCallback(async (path, options = {}) => {
     const response = await fetch(path, { ...options, headers: headers(options.headers || {}), cache: 'no-store' });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    if (!response.ok) throw new Error(body.error || body.detail || `Request failed (${response.status})`);
     return body;
   }, [headers]);
 
@@ -171,158 +79,73 @@ export default function ConsumerApp({ token, user, onLock }) {
 
   useEffect(() => {
     try { const saved = localStorage.getItem(PROFILE_KEY); setProfile(saved ? JSON.parse(saved) : null); } catch { setProfile(null); }
-    setProfileReady(true);
-    refresh();
-    api('/api/bot/config').then((result) => { if (result.bot) setBot({ symbol: result.bot.symbol, active: Boolean(result.bot.active), notional: result.bot.notional, stopLossPct: result.bot.stop_loss_pct ?? result.bot.stopLossPct ?? 3, takeProfitPct: result.bot.take_profit_pct ?? result.bot.takeProfitPct ?? 6 }); }).catch(() => {});
-    const timer = setInterval(refresh, 60000);
-    return () => clearInterval(timer);
+    setProfileReady(true); refresh(); const timer = setInterval(refresh, 60000); return () => clearInterval(timer);
   }, [refresh]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [tab]);
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [tab]);
-
-  const saveBot = async (active) => {
-    setBotBusy(true);
-    try { const result = await api('/api/bot/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bot, active }) }); setBot({ symbol: result.bot.symbol, active: Boolean(result.bot.active), notional: result.bot.notional, stopLossPct: result.bot.stop_loss_pct, takeProfitPct: result.bot.take_profit_pct }); setError(''); }
-    catch (caught) { setError(String(caught?.message || caught)); }
-    finally { setBotBusy(false); }
-  };
-
-  const saveProfile = (next) => {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); setProfile(next);
-  };
-
+  const saveProfile = (next) => { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); setProfile(next); };
   const loadBriefing = async () => {
     setBusy('briefing');
-    try { setBriefing(await api('/api/briefing', { method: 'POST' })); setError(''); }
+    try { const result = await api('/api/briefing', { method: 'POST' }); setBriefing(result); setError(''); }
     catch (caught) { setError(String(caught?.message || caught)); }
     finally { setBusy(''); }
   };
-
-  const askCopilot = async (preset) => {
-    const text = String(preset || question).trim();
-    if (!text || busy === 'copilot') return;
+  const askCopilot = async (prompt) => {
+    const text = String(prompt || question).trim(); if (!text) return;
     setQuestion(''); setMessages((items) => [...items, { role: 'user', text }]); setBusy('copilot');
     try {
-      const result = await api('/api/copilot', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: text,
-          profile,
-          portfolio: { account: engine?.account || {}, positions: engine?.positions || [], challenge: engine?.challenge || {} }
-        })
-      });
+      const result = await api('/api/copilot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: text, profile, portfolio: engine }) });
       setMessages((items) => [...items, { role: 'assistant', text: result.answer, keyPoints: result.keyPoints, risks: result.risks, provider: result.provider }]);
-      setError('');
-    } catch (caught) {
-      setMessages((items) => [...items, { role: 'assistant', text: `I could not complete that analysis: ${String(caught?.message || caught)}` }]);
-    } finally { setBusy(''); }
+    } catch (caught) { setMessages((items) => [...items, { role: 'assistant', text: `I could not complete that analysis: ${caught?.message || caught}` }]); }
+    finally { setBusy(''); }
   };
 
   const submitManualOrder = async (event) => {
     event.preventDefault();
     const symbol = manualAsset === 'crypto' ? manualSymbol.trim().toUpperCase().replace('-', '/') : manualSymbol.trim().toUpperCase();
     const amount = Number(manualAmount);
-    const validSymbol = manualAsset === 'crypto' ? /^[A-Z]{2,6}\/[A-Z]{2,6}$/.test(symbol) : /^[A-Z.]{1,10}$/.test(symbol);
-    if (!validSymbol || !Number.isFinite(amount) || amount <= 0) {
-      setManualOrder({ ok: false, message: manualSide === 'BUY' ? 'Enter a stock symbol and a dollar amount.' : 'Enter a stock symbol and a share quantity.' });
-      return;
-    }
+    const valid = manualAsset === 'crypto' ? /^[A-Z]{2,8}\/[A-Z]{2,8}$/.test(symbol) : /^[A-Z.]{1,10}$/.test(symbol);
+    if (!valid || !Number.isFinite(amount) || amount <= 0) { setManualOrder({ ok: false, message: 'Check the symbol/pair and amount.' }); return; }
     setBusy('manual-order'); setManualOrder(null);
     try {
-      const result = await api('/api/paper-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(manualSide === 'BUY'
-          ? { symbol, assetType: manualAsset, side: manualSide, notional: amount, source: 'manual' }
-          : { symbol, assetType: manualAsset, side: manualSide, qty: amount, source: 'manual' })
-      });
-      setManualOrder({ ok: true, message: `${manualSide === 'BUY' ? 'Buy' : 'Sell'} submitted for ${symbol}. Order status: ${result.order?.status || 'accepted'}.` });
-      setManualAmount('');
-      await refresh();
-    } catch (caught) {
-      const reason = caught?.message || 'The paper order was rejected.';
-      setManualOrder({ ok: false, message: reason });
-    } finally { setBusy(''); }
+      const result = await api('/api/paper-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(manualSide === 'BUY' ? { symbol, assetType: manualAsset, side: manualSide, notional: amount, source: 'manual' } : { symbol, assetType: manualAsset, side: manualSide, qty: amount, source: 'manual' }) });
+      setManualOrder({ ok: true, message: `${manualSide} paper order submitted for ${symbol}. Status: ${result.order?.status || 'accepted'}.` }); setManualAmount(''); await refresh();
+    } catch (caught) { setManualOrder({ ok: false, message: caught?.message || 'The paper order was rejected.' }); }
+    finally { setBusy(''); }
   };
 
   const account = engine?.account || {};
   const positions = engine?.positions || [];
-  const markets = intel?.markets || [];
   const events = intel?.events || [];
   const equity = safeNumber(account.equity);
   const target = Math.max(safeNumber(profile?.target, engine?.challenge?.target || 1000), 1);
   const progress = Math.max(0, Math.min(100, equity / target * 100));
   const firstName = String(user?.name || user?.email || 'there').split(/[ @]/)[0];
-  const riskWanted = profile?.risk || 'Moderate';
-  const recommended = useMemo(() => {
-    const interest = profile?.interests?.[0];
-    return STRATEGIES.find((strategy) => strategy.risk === riskWanted && (!interest || strategy.themes.includes(interest))) || STRATEGIES.find((strategy) => strategy.risk === riskWanted) || STRATEGIES[0];
-  }, [profile, riskWanted]);
-  const drivers = useMemo(() => {
-    if (positions.length) return positions.slice().sort((a, b) => Math.abs(safeNumber(b.unrealizedPnl)) - Math.abs(safeNumber(a.unrealizedPnl))).slice(0, 4).map((position) => ({ symbol: position.symbol, value: safeNumber(position.unrealizedPnl), note: `${pct(safeNumber(position.unrealizedPlpc) * 100)} unrealized` }));
-    return markets.slice().sort((a, b) => Math.abs(safeNumber(b.changePct)) - Math.abs(safeNumber(a.changePct))).slice(0, 4).map((market) => ({ symbol: market.symbol, value: safeNumber(market.changePct), note: `${pct(market.changePct)} today`, percent: true }));
-  }, [positions, markets]);
   const suggestions = useMemo(() => {
     const query = manualSymbol.trim().toLowerCase();
-    return SYMBOL_OPTIONS.filter(([symbol, name]) => (manualAsset === 'crypto') === symbol.includes('/') && (!query || symbol.toLowerCase().includes(query) || name.toLowerCase().includes(query))).slice(0, 5);
+    return SYMBOL_OPTIONS.filter(([symbol, name]) => (manualAsset === 'crypto') === symbol.includes('/') && (!query || symbol.toLowerCase().includes(query) || name.toLowerCase().includes(query))).slice(0, 6);
   }, [manualAsset, manualSymbol]);
-  const botSuggestions = useMemo(() => {
-    const query = String(bot.symbol || '').trim().toLowerCase();
-    return SYMBOL_OPTIONS.filter(([symbol, name]) => !symbol.includes('/') && (!query || symbol.toLowerCase().includes(query) || name.toLowerCase().includes(query))).slice(0, 5);
-  }, [bot.symbol]);
-  const chartMarkets = useMemo(() => markets.slice().sort((a, b) => Math.abs(safeNumber(b.changePct)) - Math.abs(safeNumber(a.changePct))).slice(0, 6), [markets]);
-  const latestLog = engine?.logs?.[0];
 
-  if (!profileReady) return <main className="ceLoading">Preparing your portfolio…</main>;
+  if (!profileReady) return <main className="ceLoading">Preparing your paper workspace…</main>;
   if (!profile) return <Onboarding brokerConnected={Boolean(engine?.safety?.brokerConfigured)} onComplete={saveProfile}/>;
-  if (tab === 'intelligence') return <div className="ceIntelMode"><button className="ceIntelBack" onClick={() => setTab('home')}>← Back to investing</button><IntelligenceCommandCenter token={token} user={user} onLock={onLock}/></div>;
+  if (intelligence) return <div className="ceIntelMode"><button className="ceIntelBack" onClick={() => setIntelligence(false)}>← Back to investing</button><IntelligenceCommandCenter token={token} user={user} onLock={onLock}/></div>;
 
-  return <main className="ceApp">
-    <Header tab={tab} setTab={setTab} user={user} onLock={onLock}/>
-    {error && <div className="ceError"><b>Connection notice</b><span>{error}</span><button onClick={() => setError('')}>×</button></div>}
+  return <main className="ceApp"><Header tab={tab} setTab={setTab} user={user} onLock={onLock}/>{error && <div className="ceError"><b>Connection notice</b><span>{error}</span><button onClick={() => setError('')}>×</button></div>}<div className="cePage">
+    {tab === 'home' && <><section className="ceWelcome"><div><p className="ceEyebrow">YOUR PAPER ACCOUNT</p><h1>Hi {firstName}. See every bot without the complexity.</h1><p>{profile.goal} · {profile.risk} risk context · live-money trading disabled</p></div><button className="cePrimary" onClick={loadBriefing} disabled={busy === 'briefing'}>{busy === 'briefing' ? 'Building brief…' : 'Get today’s edge'}</button></section>
+      <section className="ceHeroGrid"><div className="cePortfolioHero"><div className="ceHeroTop"><span>Paper portfolio</span><span className="ceConnected">{engine?.safety?.brokerConfigured ? '● Alpaca connected' : '○ Broker unavailable'}</span></div><strong>{money(equity)}</strong><div className={safeNumber(account.dayPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{safeNumber(account.dayPnl) >= 0 ? '+' : ''}{money(account.dayPnl || 0)} today</div><div className="ceGoalLine"><span>Goal</span><b>{Math.round(progress)}%</b></div><div className="ceGoalTrack"><i style={{ width: `${progress}%` }}/></div><div className="ceHeroStats"><span><small>Target</small><b>{money(target)}</b></span><span><small>Buying power</small><b>{money(account.buyingPower || account.cash || 0)}</b></span><span><small>Positions</small><b>{positions.length}</b></span></div></div>
+      <div className="ceEdgeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">TODAY’S EDGE</p><h2>{briefing?.headline || 'Market context for your paper account'}</h2></div>{briefing?.provider && <span className="ceAiBadge">{String(briefing.provider).toUpperCase()} AI</span>}</div><p>{briefing?.summary || 'Generate a briefing to connect market moves and global events to your account.'}</p>{briefing?.items?.length ? <div className="ceEdgeItems">{briefing.items.slice(0,3).map((item, index) => <div key={`${item.title}-${index}`}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.why}</small></div></div>)}</div> : <button className="ceTextButton" onClick={loadBriefing}>Create briefing →</button>}</div></section>
+      <MultiBotWorkspace api={api} compact onOpenWorkspace={() => setTab('invest')}/>
+      <section className="ceTwoCol"><div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">CURRENT HOLDINGS</p><h2>Broker exposure</h2></div><button className="ceTextButton" onClick={() => setTab('activity')}>See details</button></div>{positions.length ? <div className="ceHoldingsTable compact">{positions.slice(0,6).map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} units</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)}</small></span></div>)}</div> : <div className="ceEmpty"><b>No open positions.</b><span>Bots can still monitor while execution is locked.</span></div>}</div><div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">CAUSAL INTELLIGENCE</p><h2>Events worth knowing</h2></div><button className="ceTextButton" onClick={() => setIntelligence(true)}>Advanced view</button></div>{events.length ? <div className="ceEventList">{events.slice(0,4).map((event) => <div key={event.id}><span className={`ceSeverity s${event.severity}`}/><div><b>{event.title}</b><small>{typeLabel(event.type)} · {shortTime(event.timestamp)}</small></div></div>)}</div> : <div className="ceEmpty"><b>No priority events right now.</b></div>}</div></section>
+    </>}
 
-    <div className="cePage">
-      {tab === 'home' && <>
-        <section className="ceWelcome"><div><p className="ceEyebrow">YOUR MONEY, WITH CONTEXT</p><h1>Hi {firstName}. Here’s what matters.</h1><p>{profile.goal} · {profile.horizon} · {profile.risk} risk profile</p></div><button className="cePrimary" onClick={loadBriefing} disabled={busy === 'briefing'}>{busy === 'briefing' ? 'Building today’s edge…' : briefing ? 'Refresh today’s edge' : 'Generate today’s edge'}</button></section>
-        <section className="cePlanGrid"><div className="cePlanCard cePlanNow"><div className="ceCardTitle"><div><p className="ceEyebrow">BOT STATUS</p><h2>{engine?.safety?.autoExecution ? 'Watching the market' : 'Bot is paused'}</h2></div><span className={engine?.safety?.killSwitch ? 'ceBotStatus stop' : 'ceBotStatus on'}>{engine?.safety?.killSwitch ? 'STOPPED' : engine?.safety?.autoExecution ? 'RUNNING' : 'PAUSED'}</span></div><p>{latestLog?.message || 'The bot is waiting for its first scheduled paper cycle.'}</p><div className="cePlanSteps"><span><b>Now</b><small>{engine?.safety?.brokerConfigured ? 'Paper account connected' : 'Connect paper account'}</small></span><span><b>Next</b><small>Check fresh signals, spreads, and risk limits</small></span></div></div><div className="cePlanCard"><div className="ceCardTitle"><div><p className="ceEyebrow">ACTIVE STRATEGY</p><h2>{recommended.name}</h2></div><button className="ceTextButton" onClick={() => setTab('invest')}>Adjust →</button></div><p>{recommended.why}</p><div className="ceAllocationStrip">{recommended.allocations.slice(0,5).map(([symbol, allocation]) => <span key={symbol} style={{ width: `${allocation}%` }} title={`${symbol} ${allocation}%`}/>)}</div><div className="ceMiniAlloc">{recommended.allocations.slice(0,4).map(([symbol, allocation]) => <span key={symbol}>{symbol} {allocation}%</span>)}</div></div><div className="cePlanCard ceChartCard"><div className="ceCardTitle"><div><p className="ceEyebrow">MARKET SNAPSHOT</p><h2>What it sees</h2></div><span className="cePaperPill">LIVE DATA</span></div>{chartMarkets.length ? <div className="ceMarketBars">{chartMarkets.map((market) => <div key={market.symbol}><span>{market.symbol}</span><i className={safeNumber(market.changePct) >= 0 ? 'up' : 'down'} style={{ height: `${Math.max(10, Math.min(100, Math.abs(safeNumber(market.changePct)) * 12))}%` }}/><small>{pct(market.changePct)}</small></div>)}</div> : <p>Market snapshot will appear on the next refresh.</p>}</div></section>
-        <section className="ceHeroGrid">
-          <div className="cePortfolioHero"><div className="ceHeroTop"><span>Paper portfolio</span><span className="ceConnected">{engine?.safety?.brokerConfigured ? '● Alpaca connected' : '○ Demo data'}</span></div><strong>{money(equity)}</strong><div className={safeNumber(account.dayPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{safeNumber(account.dayPnl) >= 0 ? '+' : ''}{money(account.dayPnl || 0)} today</div><div className="ceGoalLine"><span>{profile.goal}</span><b>{Math.round(progress)}%</b></div><div className="ceGoalTrack"><i style={{ width: `${progress}%` }}/></div><div className="ceHeroStats"><span><small>Goal</small><b>{money(target)}</b></span><span><small>Buying power</small><b>{money(account.buyingPower || account.cash || 0)}</b></span><span><small>Holdings</small><b>{positions.length}</b></span></div></div>
-          <div className="ceEdgeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">TODAY’S EDGE</p><h2>{briefing?.headline || 'Your personalized market brief'}</h2></div>{briefing?.provider && <span className="ceAiBadge">{String(briefing.provider).toUpperCase()} AI</span>}</div><p>{briefing?.summary || 'CausalEdge connects market moves, world events and your holdings so you can understand the why—not just the price.'}</p>{briefing?.items?.length ? <div className="ceEdgeItems">{briefing.items.slice(0,3).map((item, index) => <div key={`${item.title}-${index}`}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.why}</small></div></div>)}</div> : <button className="ceTextButton" onClick={loadBriefing}>Create my daily briefing →</button>}</div>
-        </section>
+    {tab === 'invest' && <><section className="ceSectionHead"><div><p className="ceEyebrow">INVEST</p><h1>Manual paper orders and independent bots.</h1><p>The bot workspace is paper-only. Shared account risk overrides every bot-level setting.</p></div><button className="ceSecondary" onClick={() => { localStorage.removeItem(PROFILE_KEY); setProfile(null); }}>Update goals</button></section>
+      <section className="ceCard ceTradeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">GUARDED MANUAL TRADE</p><h2>Stock or crypto paper order</h2></div><span className="cePaperPill">PAPER ONLY</span></div><form className="ceTradeForm" onSubmit={submitManualOrder}><label><span>Asset</span><select value={manualAsset} onChange={(event) => { setManualAsset(event.target.value); setManualSymbol(''); }}><option value="stock">Stock</option><option value="crypto">Crypto</option></select></label><label className="ceSymbolField"><span>Symbol / pair</span><input value={manualSymbol} onChange={(event) => setManualSymbol(event.target.value.toUpperCase())} placeholder={manualAsset === 'crypto' ? 'BTC/USD' : 'AAPL'} maxLength={17}/>{suggestions.length > 0 && manualSymbol && <div className="ceSymbolSuggestions">{suggestions.map(([symbol, name]) => <button type="button" key={symbol} onClick={() => setManualSymbol(symbol)}><b>{symbol}</b><span>{name}</span></button>)}</div>}</label><label><span>Action</span><select value={manualSide} onChange={(event) => setManualSide(event.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label><label><span>{manualSide === 'BUY' ? 'Dollars' : 'Quantity'}</span><input type="number" min="0.0001" step="0.0001" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)}/></label><button className="cePrimary" disabled={busy === 'manual-order'}>{busy === 'manual-order' ? 'Submitting…' : `${manualSide === 'BUY' ? 'Buy' : 'Sell'} in paper`}</button></form>{manualOrder && <div className={manualOrder.ok ? 'ceTradeResult ok' : 'ceTradeResult error'}>{manualOrder.message}</div>}</section>
+      <MultiBotWorkspace api={api}/>
+      <section className="ceCard ceHoldingsCard"><div className="ceCardTitle"><div><p className="ceEyebrow">YOUR PAPER HOLDINGS</p><h2>What the broker currently holds</h2></div><span className="cePaperPill">ALPACA PAPER</span></div>{positions.length ? <div className="ceHoldingsTable">{positions.map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} units</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)} unrealized</small></span></div>)}</div> : <div className="ceEmpty"><b>No paper positions.</b><span>Bot monitoring does not require an open position.</span></div>}</section>
+    </>}
 
-        <section className="ceTwoCol">
-          <div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PORTFOLIO DRIVERS</p><h2>What’s moving you</h2></div><button className="ceTextButton" onClick={() => setTab('activity')}>See activity</button></div>{drivers.length ? <div className="ceDriverList">{drivers.map((driver) => <div key={driver.symbol}><span className="ceTicker">{driver.symbol}</span><div><b>{driver.note}</b><small>{driver.percent ? 'Watchlist move' : 'Paper position'}</small></div></div>)}</div> : <div className="ceEmpty"><b>No positions yet.</b><span>Your connected paper account is ready for research without live-money risk.</span></div>}</div>
-          <div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">CAUSAL INTELLIGENCE</p><h2>Events worth knowing</h2></div><button className="ceTextButton" onClick={() => setTab('intelligence')}>Open intelligence</button></div>{events.length ? <div className="ceEventList">{events.slice(0,4).map((event) => <div key={event.id}><span className={`ceSeverity s${event.severity}`}/><div><b>{event.title}</b><small>{typeLabel(event.type)} · {shortTime(event.timestamp)}{event.symbols?.length ? ` · ${event.symbols.slice(0,3).join(', ')}` : ''}</small></div></div>)}</div> : <div className="ceEmpty"><b>No priority events right now.</b><span>Upstream feeds can recover independently without breaking your portfolio view.</span></div>}</div>
-        </section>
+    {tab === 'ai' && <section className="ceAiLayout"><div className="ceChatPanel"><div className="ceChatHead"><div><p className="ceEyebrow">CAUSALEDGE AI</p><h1>Ask what your account and bots mean.</h1></div><span className="ceAiBadge">GROQ-READY</span></div><div className="ceMessages">{messages.map((message, index) => <div className={`ceMessage ${message.role}`} key={index}><div>{message.text}</div>{message.keyPoints?.length ? <ul>{message.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul> : null}{message.risks?.length ? <div className="ceRiskNote"><b>Risks</b>{message.risks.map((risk) => <span key={risk}>{risk}</span>)}</div> : null}{message.provider && <small>Generated with {message.provider}</small>}</div>)}</div><form className="ceChatComposer" onSubmit={(event) => { event.preventDefault(); askCopilot(); }}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your account, bots, a company, crypto, or a world event…"/><button className="cePrimary" disabled={!question.trim() || busy === 'copilot'}>{busy === 'copilot' ? 'Thinking…' : 'Ask'}</button></form><p className="ceFinePrint">Educational analysis only. AI cannot enable live trading or bypass risk controls.</p></div><aside className="ceAiSide"><div className="ceCard"><p className="ceEyebrow">TRY ASKING</p>{QUICK_QUESTIONS.map((prompt) => <button className="cePrompt" key={prompt} onClick={() => askCopilot(prompt)}>{prompt}<span>›</span></button>)}</div><div className="ceCard"><p className="ceEyebrow">ACCOUNT CONTEXT</p><div className="ceContextList"><span><small>Paper value</small><b>{money(equity)}</b></span><span><small>Positions</small><b>{positions.length}</b></span><span><small>Risk context</small><b>{profile.risk}</b></span><span><small>Intel events</small><b>{events.length}</b></span></div></div></aside></section>}
 
-        <section className="ceRecommendedCard"><div><span className="ceStrategyTag">RESEARCH IDEA</span><h2>{recommended.name}</h2><p>{recommended.description}</p><div className="ceMiniAlloc">{recommended.allocations.slice(0,4).map(([symbol, allocation]) => <span key={symbol}>{symbol} {allocation}%</span>)}</div></div><div><p className="ceEyebrow">WHY IT FITS YOUR PROFILE</p><p>{recommended.why}</p><button className="ceSecondary" onClick={() => { setSelectedStrategy(recommended); setTab('invest'); }}>Explore strategy</button></div></section>
-      </>}
-
-      {tab === 'invest' && <>
-        <section className="ceSectionHead"><div><p className="ceEyebrow">STRATEGIES</p><h1>Investing ideas you can understand.</h1><p>Explore transparent research baskets. Nothing here places an order.</p></div><button className="ceSecondary" onClick={() => { localStorage.removeItem(PROFILE_KEY); setProfile(null); }}>Update my goals</button></section>
-        <section className="ceCard ceTradeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PAPER TRADE</p><h2>Place an order</h2></div><span className="cePaperPill">PAPER ONLY</span></div><p className="ceTradeHint">Buy stocks or supported crypto pairs with the same paper-only risk controls.</p><form className="ceTradeForm" onSubmit={submitManualOrder}><label><span>Asset</span><select value={manualAsset} onChange={(event) => { setManualAsset(event.target.value); setManualSymbol(''); }}><option value="stock">Stock</option><option value="crypto">Crypto</option></select></label><label className="ceSymbolField"><span>Symbol / pair</span><input value={manualSymbol} onChange={(event) => setManualSymbol(event.target.value.toUpperCase())} placeholder={manualAsset === 'crypto' ? 'BTC/USD' : 'AAPL'} maxLength={10} autoCapitalize="characters"/>{suggestions.length > 0 && manualSymbol && <div className="ceSymbolSuggestions">{suggestions.map(([symbol, name]) => <button type="button" key={symbol} onClick={() => setManualSymbol(symbol)}><b>{symbol}</b><span>{name}</span></button>)}</div>}</label><label><span>Action</span><select value={manualSide} onChange={(event) => setManualSide(event.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label><label><span>{manualSide === 'BUY' ? 'Dollars' : 'Quantity'}</span><input type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} placeholder={manualSide === 'BUY' ? '25.00' : '0.001'}/></label><button className="cePrimary" disabled={busy === 'manual-order'}>{busy === 'manual-order' ? 'Submitting…' : `${manualSide === 'BUY' ? 'Buy' : 'Sell'} in paper`}</button></form>{manualOrder && <div className={manualOrder.ok ? 'ceTradeResult ok' : 'ceTradeResult error'}>{manualOrder.message}</div>}</section>
-        <section className="ceCard ceBotCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PAPER BOT</p><h2>Run a strategy on one stock</h2></div><span className={bot.active ? 'ceBotStatus on' : 'cePaperPill'}>{bot.active ? 'RUNNING' : 'PAUSED'}</span></div><p className="ceTradeHint">Choose a recommended symbol or enter any stock. The scheduled paper engine uses these limits and remains subject to CausalEdge risk checks.</p><div className="ceBotForm"><label className="ceSymbolField"><span>Stock symbol</span><input value={bot.symbol} onChange={(event) => setBot((value) => ({ ...value, symbol: event.target.value.toUpperCase() }))} placeholder="SPY" maxLength={10}/>{botSuggestions.length > 0 && bot.symbol && <div className="ceSymbolSuggestions">{botSuggestions.map(([symbol, name]) => <button type="button" key={symbol} onClick={() => setBot((value) => ({ ...value, symbol }))}><b>{symbol}</b><span>{name}</span></button>)}</div>}</label><label><span>Max dollars per trade</span><input type="number" min="1" max="25" step="1" value={bot.notional} onChange={(event) => setBot((value) => ({ ...value, notional: event.target.value }))}/></label><label><span>Stop loss %</span><input type="number" min="0.5" max="10" step="0.5" value={bot.stopLossPct} onChange={(event) => setBot((value) => ({ ...value, stopLossPct: event.target.value }))}/></label><label><span>Take profit %</span><input type="number" min="1" max="20" step="0.5" value={bot.takeProfitPct} onChange={(event) => setBot((value) => ({ ...value, takeProfitPct: event.target.value }))}/></label></div><div className="ceBotActions"><button className="cePrimary" disabled={botBusy} onClick={() => saveBot(true)}>{botBusy ? 'Saving…' : bot.active ? 'Save bot settings' : 'Start paper bot'}</button>{bot.active && <button className="ceSecondary" disabled={botBusy} onClick={() => saveBot(false)}>Pause bot</button>}</div></section>
-        <div className="ceStrategyGrid">{STRATEGIES.map((strategy) => <StrategyCard key={strategy.id} strategy={strategy} recommended={recommended.id === strategy.id} onOpen={setSelectedStrategy}/>)}</div>
-        <section className="ceCard ceHoldingsCard"><div className="ceCardTitle"><div><p className="ceEyebrow">YOUR PAPER HOLDINGS</p><h2>What you own</h2></div><span className="cePaperPill">READ ONLY</span></div>{positions.length ? <div className="ceHoldingsTable">{positions.map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} shares</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)} unrealized</small></span></div>)}</div> : <div className="ceEmpty"><b>No paper positions.</b><span>Use strategies as research templates before deciding what you want to test in paper mode.</span></div>}</section>
-        <section className="cePlanCard"><div><p className="ceEyebrow">RECURRING PLAN</p><h2>{money(profile.monthly)} / month</h2><p>Your goal profile is planning around this monthly amount. Recurring execution is intentionally not enabled from this consumer experience.</p></div><span className="ceLocked">🔒 Execution locked</span></section>
-      </>}
-
-      {tab === 'ai' && <section className="ceAiLayout">
-        <div className="ceChatPanel"><div className="ceChatHead"><div><p className="ceEyebrow">CAUSALEDGE AI</p><h1>Ask what the market means for you.</h1></div><span className="ceAiBadge">GROQ-READY</span></div><div className="ceMessages">{messages.map((message, index) => <div className={`ceMessage ${message.role}`} key={index}><div>{message.text}</div>{message.keyPoints?.length ? <ul>{message.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul> : null}{message.risks?.length ? <div className="ceRiskNote"><b>Risks to keep in view</b>{message.risks.map((risk) => <span key={risk}>{risk}</span>)}</div> : null}{message.provider && <small>Generated with {message.provider}</small>}</div>)}</div><form className="ceChatComposer" onSubmit={(event) => { event.preventDefault(); askCopilot(); }}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your portfolio, a company, or a world event…"/><button className="cePrimary" disabled={!question.trim() || busy === 'copilot'}>{busy === 'copilot' ? 'Thinking…' : 'Ask'}</button></form><p className="ceFinePrint">Educational analysis only. The AI cannot place trades or change your execution settings.</p></div>
-        <aside className="ceAiSide"><div className="ceCard"><p className="ceEyebrow">TRY ASKING</p>{QUICK_QUESTIONS.map((prompt) => <button className="cePrompt" key={prompt} onClick={() => askCopilot(prompt)}>{prompt}<span>›</span></button>)}</div><div className="ceCard"><p className="ceEyebrow">AI CONTEXT</p><div className="ceContextList"><span><small>Goal</small><b>{profile.goal}</b></span><span><small>Risk</small><b>{profile.risk}</b></span><span><small>Paper value</small><b>{money(equity)}</b></span><span><small>Holdings</small><b>{positions.length}</b></span><span><small>Intel events</small><b>{events.length}</b></span></div></div></aside>
-      </section>}
-
-      {tab === 'activity' && <>
-        <section className="ceSectionHead"><div><p className="ceEyebrow">ACTIVITY</p><h1>Everything that changed, in one place.</h1><p>Your paper account and CausalEdge system events remain visible and explainable.</p></div><div className="ceSafetyCluster"><span className={engine?.safety?.paperExecution ? 'warn' : 'ok'}>{engine?.safety?.paperExecution ? 'Paper execution enabled' : 'Paper execution off'}</span><span className={engine?.safety?.autoExecution ? 'warn' : 'ok'}>{engine?.safety?.autoExecution ? 'Automation enabled' : 'Automation off'}</span><span className={engine?.safety?.killSwitch ? 'ok' : 'warn'}>{engine?.safety?.killSwitch ? 'Kill switch on' : 'Kill switch off'}</span><span className="ok">Live trading off</span></div></section>
-        <section className="ceTwoCol"><div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">ACCOUNT</p><h2>Connection status</h2></div></div><div className="ceContextList"><span><small>Broker</small><b>{engine?.safety?.brokerConfigured ? 'Alpaca paper connected' : 'Not connected'}</b></span><span><small>Status</small><b>{account.status || '—'}</b></span><span><small>Cash</small><b>{money(account.cash || 0)}</b></span><span><small>Buying power</small><b>{money(account.buyingPower || 0)}</b></span></div></div><div className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">POSITIONS</p><h2>Current paper exposure</h2></div></div>{positions.length ? <div className="ceHoldingsTable compact">{positions.map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} shares</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)}</small></span></div>)}</div> : <div className="ceEmpty"><b>No open positions.</b><span>Your activity history will stay separate from market intelligence.</span></div>}</div></section>
-        <section className="ceCard"><div className="ceCardTitle"><div><p className="ceEyebrow">SYSTEM LOG</p><h2>Why CausalEdge acted—or didn’t</h2></div><span className="cePaperPill">PAPER ENGINE</span></div>{engine?.logs?.length ? <div className="ceActivityList">{engine.logs.slice(0,30).map((log, index) => <div key={`${log.time}-${index}`}><span className={`ceActivityType ${String(log.type || '').toLowerCase()}`}>{log.type}</span><div><b>{log.symbol || 'SYSTEM'}</b><p>{log.message}</p></div><time>{shortTime(log.time)}</time></div>)}</div> : <div className="ceEmpty"><b>No engine cycle has run yet.</b><span>{engine?.safety?.autoExecution ? 'Automation is enabled and waiting for its next scheduled paper cycle.' : 'The paper engine is waiting for automatic execution to be enabled.'}</span></div>}</section>
-      </>}
-    </div>
-
-    {selectedStrategy && <div className="ceModalBackdrop" onClick={() => setSelectedStrategy(null)}><section className="ceStrategyModal" onClick={(event) => event.stopPropagation()}><button className="ceModalClose" onClick={() => setSelectedStrategy(null)}>×</button><span className="ceStrategyTag">{selectedStrategy.tag}</span><h2>{selectedStrategy.name}</h2><p>{selectedStrategy.description}</p><div className="ceStrategyMeta"><span><small>Risk</small><b>{selectedStrategy.risk}</b></span><span><small>Horizon</small><b>{selectedStrategy.horizon}</b></span></div><h3>Illustrative allocation</h3><div className="ceAllocationList">{selectedStrategy.allocations.map(([symbol, allocation]) => <div key={symbol}><span><b>{symbol}</b></span><div><i style={{ width: `${allocation}%` }}/></div><b>{allocation}%</b></div>)}</div><h3>Why it exists</h3><p>{selectedStrategy.why}</p><div className="ceModalNote">Research template only. Previewing a strategy does not create, queue or submit any brokerage order.</div></section></div>}
-
-    <MobileNav tab={tab} setTab={setTab}/>
-  </main>;
+    {tab === 'activity' && <><section className="ceSectionHead"><div><p className="ceEyebrow">ACTIVITY & SAFETY</p><h1>See why the system acted—or didn’t.</h1><p>Bot audit history is stored server-side and stays separate by bot.</p></div><div className="ceSafetyCluster"><span className={engine?.safety?.paperExecution ? 'warn' : 'ok'}>{engine?.safety?.paperExecution ? 'Paper execution enabled' : 'Paper execution off'}</span><span className={engine?.safety?.autoExecution ? 'warn' : 'ok'}>{engine?.safety?.autoExecution ? 'Automation enabled' : 'Automation off'}</span><span className={engine?.safety?.killSwitch ? 'ok' : 'warn'}>{engine?.safety?.killSwitch ? 'Kill switch on' : 'Kill switch off'}</span><span className="ok">Live trading off</span></div></section><MultiBotWorkspace api={api} compact onOpenWorkspace={() => setTab('invest')}/><section className="ceTwoCol"><div className="ceCard"><p className="ceEyebrow">ACCOUNT</p><div className="ceContextList"><span><small>Broker</small><b>{engine?.safety?.brokerConfigured ? 'Alpaca paper connected' : 'Not connected'}</b></span><span><small>Status</small><b>{account.status || '—'}</b></span><span><small>Cash</small><b>{money(account.cash || 0)}</b></span><span><small>Buying power</small><b>{money(account.buyingPower || 0)}</b></span></div></div><div className="ceCard"><p className="ceEyebrow">ENGINE LOG</p>{engine?.logs?.length ? <div className="ceActivityList">{engine.logs.slice(0,20).map((log, index) => <div key={`${log.time}-${index}`}><span className={`ceActivityType ${String(log.type || '').toLowerCase()}`}>{log.type}</span><div><b>{log.symbol || 'SYSTEM'}</b><p>{log.message}</p></div><time>{shortTime(log.time)}</time></div>)}</div> : <div className="ceEmpty"><b>No legacy engine log entries yet.</b></div>}</div></section></>}
+  </div><MobileNav tab={tab} setTab={setTab}/></main>;
 }

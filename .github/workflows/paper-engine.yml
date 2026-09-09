@@ -1,4 +1,4 @@
-name: CausalEdge paper engine
+name: CausalEdge multi-bot paper engine
 
 on:
   schedule:
@@ -9,7 +9,7 @@ jobs:
   run-paper-engine:
     runs-on: ubuntu-latest
     steps:
-      - name: Run guarded paper cycle
+      - name: Run guarded multi-bot paper cycle
         env:
           SITE_URL: https://darkviolet-ibis-337737.hostingersite.com
           CRON_SECRET: ${{ secrets.CAUSALEDGE_CRON_SECRET }}
@@ -17,5 +17,5 @@ jobs:
           set -euo pipefail
           test -n "$CRON_SECRET"
           curl --fail-with-body --silent --show-error \
-            --request POST "$SITE_URL/api/engine?action=run" \
+            --request POST "$SITE_URL/api/bots/run" \
             --header "x-engine-secret: $CRON_SECRET"
