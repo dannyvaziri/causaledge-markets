@@ -1,5 +1,4 @@
 import { aiProvider } from '../../../lib/ai.js';
-
 import { auditConfigured } from '../../../lib/audit.js';
 
 export const dynamic = 'force-dynamic';
@@ -28,9 +27,10 @@ export async function GET() {
       aiConfigured,
       aiProvider: aiProvider(),
       cronConfigured,
-    appUrlConfigured: Boolean(process.env.APP_URL),
-    auditConfigured: auditConfigured(),
+      appUrlConfigured: Boolean(process.env.APP_URL),
+      auditConfigured: auditConfigured(),
     },
+    multiBotExecutionEnabled: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
     paperExecutionEnabled: process.env.PAPER_EXECUTION_ENABLED === 'true',
     autoExecutionEnabled: process.env.AUTO_EXECUTION_ENABLED === 'true',
     killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
