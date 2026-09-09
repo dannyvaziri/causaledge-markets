@@ -141,6 +141,10 @@ export default function ConsumerApp({ token, user, onLock }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [question, setQuestion] = useState('');
+  const [manualSymbol, setManualSymbol] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualSide, setManualSide] = useState('BUY');
+  const [manualOrder, setManualOrder] = useState(null);
   const [messages, setMessages] = useState([{ role: 'assistant', text: 'Ask me what changed, what matters to your holdings, or what a market event could mean. I will explain the evidence and tradeoffs without placing trades.' }]);
 
   const headers = useCallback((extra = {}) => ({ ...extra, ...(token ? { 'x-ce-token': token } : {}) }), [token]);
@@ -197,6 +201,32 @@ export default function ConsumerApp({ token, user, onLock }) {
     } finally { setBusy(''); }
   };
 
+  const submitManualOrder = async (event) => {
+    event.preventDefault();
+    const symbol = manualSymbol.trim().toUpperCase();
+    const amount = Number(manualAmount);
+    if (!/^[A-Z.]{1,10}$/.test(symbol) || !Number.isFinite(amount) || amount <= 0) {
+      setManualOrder({ ok: false, message: manualSide === 'BUY' ? 'Enter a stock symbol and a dollar amount.' : 'Enter a stock symbol and a share quantity.' });
+      return;
+    }
+    setBusy('manual-order'); setManualOrder(null);
+    try {
+      const result = await api('/api/paper-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(manualSide === 'BUY'
+          ? { symbol, side: manualSide, notional: amount, source: 'manual' }
+          : { symbol, side: manualSide, qty: amount, source: 'manual' })
+      });
+      setManualOrder({ ok: true, message: `${manualSide === 'BUY' ? 'Buy' : 'Sell'} submitted for ${symbol}. Order status: ${result.order?.status || 'accepted'}.` });
+      setManualAmount('');
+      await refresh();
+    } catch (caught) {
+      const reason = caught?.message || 'The paper order was rejected.';
+      setManualOrder({ ok: false, message: reason });
+    } finally { setBusy(''); }
+  };
+
   const account = engine?.account || {};
   const positions = engine?.positions || [];
   const markets = intel?.markets || [];
@@ -241,6 +271,7 @@ export default function ConsumerApp({ token, user, onLock }) {
 
       {tab === 'invest' && <>
         <section className="ceSectionHead"><div><p className="ceEyebrow">STRATEGIES</p><h1>Investing ideas you can understand.</h1><p>Explore transparent research baskets. Nothing here places an order.</p></div><button className="ceSecondary" onClick={() => { localStorage.removeItem(PROFILE_KEY); setProfile(null); }}>Update my goals</button></section>
+        <section className="ceCard ceTradeCard"><div className="ceCardTitle"><div><p className="ceEyebrow">PAPER TRADE</p><h2>Place an order</h2></div><span className="cePaperPill">PAPER ONLY</span></div><p className="ceTradeHint">Buy with a dollar amount or sell shares you already own. Every order passes the account limits and kill switch first.</p><form className="ceTradeForm" onSubmit={submitManualOrder}><label><span>Symbol</span><input value={manualSymbol} onChange={(event) => setManualSymbol(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={10} autoCapitalize="characters"/></label><label><span>Action</span><select value={manualSide} onChange={(event) => setManualSide(event.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label><label><span>{manualSide === 'BUY' ? 'Dollars' : 'Shares'}</span><input type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} placeholder={manualSide === 'BUY' ? '25.00' : '1'}/></label><button className="cePrimary" disabled={busy === 'manual-order'}>{busy === 'manual-order' ? 'Submitting…' : `${manualSide === 'BUY' ? 'Buy' : 'Sell'} in paper`}</button></form>{manualOrder && <div className={manualOrder.ok ? 'ceTradeResult ok' : 'ceTradeResult error'}>{manualOrder.message}</div>}</section>
         <div className="ceStrategyGrid">{STRATEGIES.map((strategy) => <StrategyCard key={strategy.id} strategy={strategy} recommended={recommended.id === strategy.id} onOpen={setSelectedStrategy}/>)}</div>
         <section className="ceCard ceHoldingsCard"><div className="ceCardTitle"><div><p className="ceEyebrow">YOUR PAPER HOLDINGS</p><h2>What you own</h2></div><span className="cePaperPill">READ ONLY</span></div>{positions.length ? <div className="ceHoldingsTable">{positions.map((position) => <div key={position.symbol}><span><b>{position.symbol}</b><small>{safeNumber(position.qty)} shares</small></span><span><b>{money(position.marketValue)}</b><small className={safeNumber(position.unrealizedPnl) >= 0 ? 'ceGain' : 'ceLoss'}>{money(position.unrealizedPnl)} unrealized</small></span></div>)}</div> : <div className="ceEmpty"><b>No paper positions.</b><span>Use strategies as research templates before deciding what you want to test in paper mode.</span></div>}</section>
         <section className="cePlanCard"><div><p className="ceEyebrow">RECURRING PLAN</p><h2>{money(profile.monthly)} / month</h2><p>Your goal profile is planning around this monthly amount. Recurring execution is intentionally not enabled from this consumer experience.</p></div><span className="ceLocked">🔒 Execution locked</span></section>
