@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import CommandCenter from './CommandCenter';
+import IntelligenceCommandCenter from './IntelligenceCommandCenter';
 import { money, pct, shortTime, typeLabel } from '../lib/format.js';
 
 const PROFILE_KEY = 'causaledge-investor-profile-v1';
@@ -217,7 +217,7 @@ export default function ConsumerApp({ token, user, onLock }) {
 
   if (!profileReady) return <main className="ceLoading">Preparing your portfolio…</main>;
   if (!profile) return <Onboarding brokerConnected={Boolean(engine?.safety?.brokerConfigured)} onComplete={saveProfile}/>;
-  if (tab === 'intelligence') return <div className="ceIntelMode"><button className="ceIntelBack" onClick={() => setTab('home')}>← Back to investing</button><CommandCenter token={token} user={user} onLock={onLock}/></div>;
+  if (tab === 'intelligence') return <div className="ceIntelMode"><button className="ceIntelBack" onClick={() => setTab('home')}>← Back to investing</button><IntelligenceCommandCenter token={token} user={user} onLock={onLock}/></div>;
 
   return <main className="ceApp">
     <Header tab={tab} setTab={setTab} user={user} onLock={onLock}/>
