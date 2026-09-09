@@ -178,6 +178,10 @@ export default function ConsumerApp({ token, user, onLock }) {
     return () => clearInterval(timer);
   }, [refresh]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [tab]);
+
   const saveBot = async (active) => {
     setBotBusy(true);
     try { const result = await api('/api/bot/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bot, active }) }); setBot({ symbol: result.bot.symbol, active: Boolean(result.bot.active), notional: result.bot.notional, stopLossPct: result.bot.stop_loss_pct, takeProfitPct: result.bot.take_profit_pct }); setError(''); }
