@@ -1,3 +1,5 @@
+import { aiProvider } from '../../../lib/ai.js';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -22,6 +24,7 @@ export async function GET() {
       brokerConfigured,
       liveBrokerConfigured,
       aiConfigured,
+      aiProvider: aiProvider(),
       cronConfigured,
       appUrlConfigured: Boolean(process.env.APP_URL),
     },
