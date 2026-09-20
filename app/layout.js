@@ -4,10 +4,11 @@ import './styles/panels.css';
 import './styles/overlays.css';
 import './styles/consumer.css';
 import './styles/bots.css';
+import './styles/phase-five.css';
 
 export const metadata = {
-  title: 'CausalEdge Markets | Multi-Bot Paper Investing',
-  description: 'A paper-only investing workspace with independent stock and crypto bots, shared account risk controls, AI explanations, and global market intelligence.',
+  title: 'CausalEdge Markets | Paper Investing',
+  description: 'A calm paper-only stocks and ETFs workspace with transparent bot decisions and account-level safety controls.',
 };
 
 export default function RootLayout({ children }) {

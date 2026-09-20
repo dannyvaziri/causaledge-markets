@@ -15,11 +15,9 @@ export async function GET(request) {
   if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return Response.json({ suggestions: [] });
   const url = new URL(request.url);
   const query = String(url.searchParams.get('q') || '').trim().toUpperCase().slice(0, 24);
-  const assetType = url.searchParams.get('assetType') === 'crypto' ? 'crypto' : 'stock';
   if (!query) return Response.json({ suggestions: [] });
   try {
-    const assetClass = assetType === 'crypto' ? 'crypto' : 'us_equity';
-    const response = await fetch(`${PAPER_BASE}/v2/assets?status=active&asset_class=${assetClass}`, { headers: headers(), cache: 'no-store' });
+    const response = await fetch(`${PAPER_BASE}/v2/assets?status=active&asset_class=us_equity`, { headers: headers(), cache: 'no-store' });
     const assets = await response.json();
     if (!response.ok) throw new Error(assets?.message || `Asset search failed (${response.status})`);
     const normalized = query.replace('-', '/');
@@ -38,7 +36,7 @@ export async function GET(request) {
         return aStarts - bStarts || aSymbol.length - bSymbol.length || aSymbol.localeCompare(bSymbol);
       })
       .slice(0, 12)
-      .map((asset) => ({ symbol: asset.symbol, name: asset.name || asset.symbol, assetType, fractionable: Boolean(asset.fractionable) }));
+      .map((asset) => ({ symbol: asset.symbol, name: asset.name || asset.symbol, assetType: 'stock', fractionable: Boolean(asset.fractionable) }));
     return Response.json({ suggestions }, { headers: { 'Cache-Control': 'private, max-age=30' } });
   } catch (error) {
     return Response.json({ suggestions: [], error: String(error?.message || error) }, { status: 200 });

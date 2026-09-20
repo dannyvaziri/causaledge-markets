@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import LoginCard from './components/LoginCard';
-import ConsumerApp from './components/ConsumerApp';
+import PhaseFiveApp from './components/PhaseFiveApp';
 
 export default function Home() {
   const [token, setToken] = useState('');
@@ -43,5 +43,5 @@ export default function Home() {
 
   if (checking) return <LoginCard loading/>;
   if (!token && !user) return <LoginCard error={error} draftToken={draft} setDraftToken={setDraft} unlock={unlock}/>;
-  return <ConsumerApp token={token} user={user} onLock={lock}/>;
+  return <PhaseFiveApp token={token} user={user} onLock={lock}/>;
 }

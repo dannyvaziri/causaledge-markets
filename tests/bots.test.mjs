@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeBotSymbol, sanitizeBot, sharedRiskLimits } from '../lib/bots.js';
 
-test('normalizes stock and crypto symbols', () => {
+test('normalizes stock and ETF symbols', () => {
   assert.equal(normalizeBotSymbol('aapl', 'stock'), 'AAPL');
-  assert.equal(normalizeBotSymbol('btc-usd', 'crypto'), 'BTC/USD');
-  assert.throws(() => normalizeBotSymbol('BTCUSD', 'crypto'));
+  assert.equal(normalizeBotSymbol('spy', 'stock'), 'SPY');
+  assert.throws(() => normalizeBotSymbol('BTC/USD'));
 });
 
 test('sanitizes a paused stock bot with bounded risk settings', () => {
@@ -30,12 +30,8 @@ test('sanitizes a paused stock bot with bounded risk settings', () => {
   assert.equal(bot.maxDailyLossUsd, 3);
 });
 
-test('supports crypto bots without enabling live trading semantics', () => {
-  const bot = sanitizeBot({ assetType: 'crypto', symbol: 'eth/usd', strategy: 'breakout', status: 'running' }, { id: 'crypto-bot' });
-  assert.equal(bot.assetType, 'crypto');
-  assert.equal(bot.symbol, 'ETH/USD');
-  assert.equal(bot.strategy, 'breakout');
-  assert.equal(bot.status, 'running');
+test('rejects crypto bot creation in Phase 5', () => {
+  assert.throws(() => sanitizeBot({ assetType: 'crypto', symbol: 'ETH/USD' }));
 });
 
 test('shared risk limits stay conservative for a $100 paper account', () => {
