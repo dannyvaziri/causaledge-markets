@@ -1,4 +1,5 @@
-import { isDashboardAuthorized } from '../../../lib/access.js';
+import { authorizedUser, isDashboardAuthorized } from '../../../lib/access.js';
+import { primaryPaperOwnerKey, userScopeKey } from '../../../lib/user-scope.js';
 import { evaluateRisk } from '../../../lib/risk.js';
 
 const PAPER_BASE = 'https://paper-api.alpaca.markets';
@@ -24,6 +25,8 @@ async function alpaca(path, options = {}) {
 
 export async function POST(request) {
   if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in first.' }, { status: 401 });
+  const user = authorizedUser(request);
+  if (!user || userScopeKey(user) !== primaryPaperOwnerKey()) return Response.json({ error: 'This Alpaca paper account is assigned to a different CausalEdge user.' }, { status: 403 });
   const body = await request.json().catch(() => ({}));
 
   if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) {
