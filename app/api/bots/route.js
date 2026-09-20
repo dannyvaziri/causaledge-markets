@@ -1,5 +1,6 @@
-import { isDashboardAuthorized } from '../../../lib/access.js';
+import { authorizedUser, isDashboardAuthorized } from '../../../lib/access.js';
 import { deleteBotConfig, loadBotActivity, loadBots, loadRecentBotActivity, sanitizeBot, saveBotConfig, sharedRiskLimits } from '../../../lib/bots.js';
+import { primaryPaperOwnerKey, userScopeKey } from '../../../lib/user-scope.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +32,8 @@ function sameSymbol(a, b) {
   return String(a || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-async function accountSnapshot() {
-  if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return { account: null, positions: [] };
+async function accountSnapshot(enabled) {
+  if (!enabled || !process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return { account: null, positions: [] };
   const [account, positions] = await Promise.all([jsonFetch(`${PAPER_BASE}/v2/account`), jsonFetch(`${PAPER_BASE}/v2/positions`)]);
   const equity = Number(account?.equity || 0);
   const lastEquity = Number(account?.last_equity || equity || 0);
@@ -62,6 +63,7 @@ async function marketSeries(bot) {
 function nextPlan(bot, safety) {
   if (bot.status === 'paused') return 'Paused. Resume this bot when you want it to evaluate its next paper signal.';
   if (bot.status === 'stopped') return 'Stopped. Edit or duplicate it before running again.';
+  if (!safety.paperAccountAccess) return 'This user has no Alpaca paper execution assignment. Connect Robinhood Agentic for a user-specific broker account; execution stays disabled.';
   if (!safety.multiBotArmed) return 'Multi-bot execution is not armed yet. The bot can monitor and show charts, but it cannot submit a new entry.';
   if (safety.killSwitch) return 'Global kill switch is on, so no new entry can be submitted.';
   if (!safety.paperExecution) return 'Waiting for paper execution authorization.';
@@ -75,20 +77,29 @@ function nextPlan(bot, safety) {
   return plans[bot.strategy] || 'Evaluate the next paper signal and shared account-level risk limits.';
 }
 
+function signedInUser(request) {
+  if (!isDashboardAuthorized(request)) return null;
+  return authorizedUser(request);
+}
+
 export async function GET(request) {
-  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in first.' }, { status: 401 });
+  const user = signedInUser(request);
+  if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 });
   try {
+    const ownerKey = userScopeKey(user);
+    const paperAccountAccess = ownerKey === primaryPaperOwnerKey();
     const url = new URL(request.url);
     const requestedId = url.searchParams.get('id');
-    const bots = await loadBots();
-    const snapshot = await accountSnapshot().catch(() => ({ account: null, positions: [] }));
-    const activity = requestedId ? await loadBotActivity(requestedId, 120) : await loadRecentBotActivity(240);
+    const bots = await loadBots(ownerKey);
+    const snapshot = await accountSnapshot(paperAccountAccess).catch(() => ({ account: null, positions: [] }));
+    const activity = requestedId ? await loadBotActivity(requestedId, ownerKey, 120) : await loadRecentBotActivity(ownerKey, 240);
     const safety = {
-      multiBotArmed: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
-      paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
-      autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
+      paperAccountAccess,
+      multiBotArmed: paperAccountAccess && process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
+      paperExecution: paperAccountAccess && process.env.PAPER_EXECUTION_ENABLED === 'true',
+      autoExecution: paperAccountAccess && process.env.AUTO_EXECUTION_ENABLED === 'true',
       killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-      liveTrading: process.env.LIVE_TRADING_ENABLED === 'true',
+      liveTrading: false,
     };
 
     const selected = requestedId ? bots.filter((bot) => bot.id === requestedId) : bots;
@@ -116,37 +127,39 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in first.' }, { status: 401 });
+  const user = signedInUser(request);
+  if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 });
+  const ownerKey = userScopeKey(user);
   const body = await request.json().catch(() => ({}));
   const action = String(body.action || 'create').toLowerCase();
   try {
-    const bots = await loadBots();
+    const bots = await loadBots(ownerKey);
     const find = (id) => bots.find((bot) => bot.id === String(id || ''));
     let bot = null;
 
     if (action === 'create') {
       bot = sanitizeBot({ ...body.bot, status: 'paused' });
-      await saveBotConfig(bot, 'Bot created in paused state.');
+      await saveBotConfig(bot, 'Bot created in paused state.', ownerKey);
     } else if (action === 'update') {
       const current = find(body.bot?.id || body.id);
       if (!current) return Response.json({ error: 'Bot not found.' }, { status: 404 });
       bot = sanitizeBot({ ...current, ...body.bot, id: current.id, status: current.status, createdAt: current.createdAt }, { id: current.id });
-      await saveBotConfig(bot, 'Bot settings updated.');
+      await saveBotConfig(bot, 'Bot settings updated.', ownerKey);
     } else if (action === 'duplicate') {
       const current = find(body.id);
       if (!current) return Response.json({ error: 'Bot not found.' }, { status: 404 });
       bot = sanitizeBot({ ...current, id: undefined, name: `${current.name} copy`, status: 'paused', createdAt: undefined });
-      await saveBotConfig(bot, 'Bot duplicated in paused state.');
+      await saveBotConfig(bot, 'Bot duplicated in paused state.', ownerKey);
     } else if (['pause', 'resume', 'stop'].includes(action)) {
       const current = find(body.id);
       if (!current) return Response.json({ error: 'Bot not found.' }, { status: 404 });
       const status = action === 'resume' ? 'running' : action === 'pause' ? 'paused' : 'stopped';
       bot = sanitizeBot({ ...current, status }, { id: current.id });
-      await saveBotConfig(bot, `Bot ${status}.`);
+      await saveBotConfig(bot, `Bot ${status}.`, ownerKey);
     } else if (action === 'delete') {
       const current = find(body.id);
       if (!current) return Response.json({ error: 'Bot not found.' }, { status: 404 });
-      await deleteBotConfig(current);
+      await deleteBotConfig(current, 'Bot deleted.', ownerKey);
       return Response.json({ ok: true, deleted: current.id });
     } else {
       return Response.json({ error: 'Unknown bot action.' }, { status: 400 });
