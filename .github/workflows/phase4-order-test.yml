@@ -9,7 +9,7 @@ jobs:
   paper-round-trip:
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for Hostinger and run one idempotent paper round-trip
+      - name: Wait for Hostinger and run one idempotent $10 paper round-trip
         env:
           SITE_URL: https://darkviolet-ibis-337737.hostingersite.com
           CRON_SECRET: ${{ secrets.CAUSALEDGE_CRON_SECRET }}

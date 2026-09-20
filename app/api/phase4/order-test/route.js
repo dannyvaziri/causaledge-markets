@@ -178,7 +178,7 @@ export async function POST(request) {
       throw new Error('Controlled paper round-trip left a BTC/USD residual position.');
     }
 
-    await audit(ownerKey, 'PHASE4_ORDER_TEST_COMPLETE', 'PASS', 'Controlled $1 BTC/USD paper round-trip completed and closed.', {
+    await audit(ownerKey, 'PHASE4_ORDER_TEST_COMPLETE', 'PASS', 'Controlled $10 BTC/USD paper round-trip completed and closed.', {
       buyOrderId: buy.id,
       sellOrderId: sell.id,
       buyFilledQty: filledQty,

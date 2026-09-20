@@ -9,8 +9,8 @@ const clean = {
   openOrders: [],
 };
 
-test('controlled Phase 4 paper round-trip is capped at $1 BTC/USD', () => {
-  assert.equal(PHASE4_TEST_NOTIONAL, 1);
+test('controlled Phase 4 paper round-trip is capped at $10 BTC/USD', () => {
+  assert.equal(PHASE4_TEST_NOTIONAL, 10);
   assert.equal(PHASE4_TEST_SYMBOL, 'BTC/USD');
   assert.equal(phase4OrderTestPreconditions(clean).approved, true);
 });
