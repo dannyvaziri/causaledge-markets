@@ -19,7 +19,7 @@ export async function GET() {
     ok: true,
     service: 'causaledge-markets',
     product: 'CausalEdge Markets',
-    release: 'phase3-user-robinhood-v1',
+    release: 'phase4-paper-validation-v1',
     mode: brokerConfigured ? (liveTrading ? 'alpaca-live' : 'alpaca-paper') : 'demo',
     liveTrading,
     configuration: {
