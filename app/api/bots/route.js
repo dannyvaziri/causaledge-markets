@@ -1,6 +1,7 @@
 import { authorizedUser, isDashboardAuthorized } from '../../../lib/access.js';
 import { deleteBotConfig, loadBotActivity, loadBots, loadRecentBotActivity, sanitizeBot, saveBotConfig, sharedRiskLimits } from '../../../lib/bots.js';
 import { primaryPaperOwnerKey, userScopeKey } from '../../../lib/user-scope.js';
+import { paperSafetyState } from '../../../lib/paper-safety.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,13 +94,15 @@ export async function GET(request) {
     const bots = await loadBots(ownerKey);
     const snapshot = await accountSnapshot(paperAccountAccess).catch(() => ({ account: null, positions: [] }));
     const activity = requestedId ? await loadBotActivity(requestedId, ownerKey, 120) : await loadRecentBotActivity(ownerKey, 240);
+    const globalSafety = paperSafetyState();
     const safety = {
+      ...globalSafety,
       paperAccountAccess,
-      multiBotArmed: paperAccountAccess && process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
-      paperExecution: paperAccountAccess && process.env.PAPER_EXECUTION_ENABLED === 'true',
-      autoExecution: paperAccountAccess && process.env.AUTO_EXECUTION_ENABLED === 'true',
-      killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-      liveTrading: false,
+      multiBotArmed: paperAccountAccess && globalSafety.multiBotArmed,
+      paperExecution: paperAccountAccess && globalSafety.paperExecution,
+      autoExecution: paperAccountAccess && globalSafety.autoExecution,
+      killSwitch: globalSafety.killSwitch,
+      liveTrading: globalSafety.liveTrading,
     };
 
     const selected = requestedId ? bots.filter((bot) => bot.id === requestedId) : bots;
