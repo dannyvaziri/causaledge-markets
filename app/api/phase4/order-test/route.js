@@ -6,6 +6,7 @@ import { primaryPaperOwnerKey } from '../../../../lib/user-scope.js';
 export const dynamic = 'force-dynamic';
 
 const PAPER_BASE = 'https://paper-api.alpaca.markets';
+const TEST_POSITION_SYMBOL = 'BTCUSD';
 
 function alpacaHeaders() {
   return {
@@ -42,15 +43,15 @@ function supabase() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function completed(ownerKey) {
+async function latestAudit(ownerKey, eventType) {
   const client = supabase();
   if (!client) throw new Error('Supabase audit storage is required for the controlled paper-order test.');
   const { data, error } = await client
     .from('execution_audit')
-    .select('id,created_at,event_type,status,metadata')
-    .eq('event_type', 'PHASE4_ORDER_TEST_COMPLETE')
+    .select('id,created_at,event_type,status,order_id,message,metadata')
+    .eq('event_type', eventType)
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(200);
   if (error) throw error;
   return (data || []).find((row) => String(row?.metadata?.ownerKey || '') === ownerKey) || null;
 }
@@ -71,7 +72,7 @@ async function audit(ownerKey, eventType, status, message, metadata = {}) {
   if (error) throw error;
 }
 
-async function pollOrder(orderId, attempts = 12) {
+async function pollOrder(orderId, attempts = 15) {
   for (let i = 0; i < attempts; i += 1) {
     const order = await jsonFetch(`${PAPER_BASE}/v2/orders/${encodeURIComponent(orderId)}`);
     if (order?.status === 'filled') return order;
@@ -92,6 +93,35 @@ async function snapshot() {
   return { account, positions: positions || [], openOrders: openOrders || [] };
 }
 
+function isTestPosition(position) {
+  return String(position?.symbol || '').replace(/[^A-Z0-9]/g, '').toUpperCase() === TEST_POSITION_SYMBOL;
+}
+
+async function waitUntilFlat(attempts = 15) {
+  for (let i = 0; i < attempts; i += 1) {
+    const state = await snapshot();
+    if (!(state.positions || []).some(isTestPosition)) return state;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error('Controlled paper cleanup did not flatten BTC/USD within the validation window.');
+}
+
+async function closeTestPosition(ownerKey, reason) {
+  const closeOrder = await jsonFetch(`${PAPER_BASE}/v2/positions/${TEST_POSITION_SYMBOL}`, { method: 'DELETE' });
+  await audit(ownerKey, 'PHASE4_ORDER_TEST_SELL', 'ACCEPTED', reason, {
+    side: 'SELL',
+    orderId: closeOrder?.id || null,
+    cleanup: true,
+  });
+  const fill = closeOrder?.id ? await pollOrder(closeOrder.id) : null;
+  await waitUntilFlat();
+  return { closeOrder, fill };
+}
+
+async function complete(ownerKey, metadata = {}) {
+  await audit(ownerKey, 'PHASE4_ORDER_TEST_COMPLETE', 'PASS', 'Controlled $10 BTC/USD paper round-trip completed and account returned flat.', metadata);
+}
+
 export async function POST(request) {
   const expected = process.env.CRON_SECRET || process.env.ENGINE_SECRET || '';
   if (!matchesSecret(request.headers.get('x-engine-secret'), expected)) {
@@ -108,8 +138,8 @@ export async function POST(request) {
   }
 
   try {
-    const prior = await completed(ownerKey);
-    if (prior) {
+    const priorComplete = await latestAudit(ownerKey, 'PHASE4_ORDER_TEST_COMPLETE');
+    if (priorComplete) {
       return Response.json({
         ok: true,
         phase: 4,
@@ -117,11 +147,39 @@ export async function POST(request) {
         alreadyComplete: true,
         liveTradingEnabled: false,
         orderPlacedThisRun: false,
-        completedAt: prior.created_at,
+        completedAt: priorComplete.created_at,
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const before = await snapshot();
+
+    // Recovery is intentionally narrow: only flatten BTC/USD if this exact Phase 4
+    // validation previously submitted a buy and there are no unrelated positions/orders.
+    if ((before.positions || []).length > 0) {
+      const priorBuy = await latestAudit(ownerKey, 'PHASE4_ORDER_TEST_BUY');
+      const onlyTestPosition = before.positions.length === 1 && isTestPosition(before.positions[0]);
+      if (priorBuy && onlyTestPosition && before.openOrders.length === 0) {
+        const recovered = await closeTestPosition(ownerKey, 'Recovered and closed the BTC/USD paper position created by the Phase 4 validation test.');
+        await complete(ownerKey, {
+          recovered: true,
+          buyOrderId: priorBuy.order_id || priorBuy?.metadata?.orderId || null,
+          sellOrderId: recovered.closeOrder?.id || null,
+          sellAvgPrice: Number(recovered.fill?.filled_avg_price || 0),
+        });
+        return Response.json({
+          ok: true,
+          phase: 4,
+          orderTestComplete: true,
+          alreadyComplete: false,
+          recovered: true,
+          liveTradingEnabled: false,
+          orderPlacedThisRun: true,
+          residualPosition: false,
+          timestamp: new Date().toISOString(),
+        }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+    }
+
     const preconditions = phase4OrderTestPreconditions({
       liveTrading: false,
       account: before.account,
@@ -144,7 +202,7 @@ export async function POST(request) {
         client_order_id: `ce-phase4-buy-${Date.now()}`.slice(0, 48),
       }),
     });
-    await audit(ownerKey, 'PHASE4_ORDER_TEST_BUY', 'ACCEPTED', 'Submitted controlled $1 BTC/USD paper validation buy.', {
+    await audit(ownerKey, 'PHASE4_ORDER_TEST_BUY', 'ACCEPTED', 'Submitted controlled $10 BTC/USD paper validation buy.', {
       side: 'BUY',
       orderId: buy.id,
       notional: PHASE4_TEST_NOTIONAL,
@@ -154,36 +212,14 @@ export async function POST(request) {
     const filledQty = Number(buyFill?.filled_qty || 0);
     if (!(filledQty > 0)) throw new Error('Controlled paper buy returned no filled quantity.');
 
-    const sell = await jsonFetch(`${PAPER_BASE}/v2/orders`, {
-      method: 'POST',
-      body: JSON.stringify({
-        symbol: PHASE4_TEST_SYMBOL,
-        side: 'sell',
-        type: 'market',
-        time_in_force: 'gtc',
-        qty: String(filledQty),
-        client_order_id: `ce-phase4-sell-${Date.now()}`.slice(0, 48),
-      }),
-    });
-    await audit(ownerKey, 'PHASE4_ORDER_TEST_SELL', 'ACCEPTED', 'Submitted controlled BTC/USD paper validation close.', {
-      side: 'SELL',
-      orderId: sell.id,
-      qty: filledQty,
-    });
-
-    const sellFill = await pollOrder(sell.id);
-    const after = await snapshot();
-    const btcPosition = (after.positions || []).find((position) => String(position.symbol || '').replace(/[^A-Z0-9]/g, '') === 'BTCUSD');
-    if (btcPosition && Math.abs(Number(btcPosition.qty || 0)) > 0.00000001) {
-      throw new Error('Controlled paper round-trip left a BTC/USD residual position.');
-    }
-
-    await audit(ownerKey, 'PHASE4_ORDER_TEST_COMPLETE', 'PASS', 'Controlled $10 BTC/USD paper round-trip completed and closed.', {
+    const closed = await closeTestPosition(ownerKey, 'Closed the full BTC/USD paper validation position using Alpaca close-position.');
+    await complete(ownerKey, {
+      recovered: false,
       buyOrderId: buy.id,
-      sellOrderId: sell.id,
+      sellOrderId: closed.closeOrder?.id || null,
       buyFilledQty: filledQty,
       buyAvgPrice: Number(buyFill?.filled_avg_price || 0),
-      sellAvgPrice: Number(sellFill?.filled_avg_price || 0),
+      sellAvgPrice: Number(closed.fill?.filled_avg_price || 0),
     });
 
     return Response.json({
@@ -198,7 +234,7 @@ export async function POST(request) {
         buyNotional: PHASE4_TEST_NOTIONAL,
         filledQty,
         buyStatus: buyFill.status,
-        sellStatus: sellFill.status,
+        sellStatus: closed.fill?.status || 'submitted',
         residualPosition: false,
       },
       timestamp: new Date().toISOString(),
