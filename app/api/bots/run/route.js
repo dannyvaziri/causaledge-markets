@@ -2,6 +2,7 @@ import { isDashboardAuthorized, matchesSecret } from '../../../../lib/access.js'
 import { evaluateRisk } from '../../../../lib/risk.js';
 import { loadBotActivity, loadBots, sharedRiskLimits, writeBotEvent } from '../../../../lib/bots.js';
 import { primaryPaperOwnerKey } from '../../../../lib/user-scope.js';
+import { paperEntryBlockReason, paperSafetyState } from '../../../../lib/paper-safety.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,25 +38,6 @@ function authorized(request) {
 
 function keyFor(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-function safetyState() {
-  return {
-    multiBotArmed: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
-    paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
-    autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
-    killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-    liveTrading: process.env.LIVE_TRADING_ENABLED === 'true',
-  };
-}
-
-function entryBlockReason(safety) {
-  if (safety.liveTrading) return 'The multi-bot engine is paper-only and will not run while live trading is enabled.';
-  if (!safety.multiBotArmed) return 'Multi-bot paper execution is not armed. Monitoring and configuration remain available.';
-  if (safety.killSwitch) return 'Global kill switch blocks all new bot entries.';
-  if (!safety.paperExecution) return 'Paper execution is disabled.';
-  if (!safety.autoExecution) return 'Automatic paper execution is disabled.';
-  return '';
 }
 
 async function barsFor(bot) {
@@ -158,8 +140,8 @@ export async function POST(request) {
   if (!ownerKey) return Response.json({ error: 'PAPER_ACCOUNT_OWNER_EMAIL or ALLOWED_GOOGLE_EMAILS must identify the paper-account owner.' }, { status: 503 });
 
   const bots = (await loadBots(ownerKey)).filter((bot) => bot.status === 'running');
-  const safety = safetyState();
-  const blocked = entryBlockReason(safety);
+  const safety = paperSafetyState();
+  const blocked = paperEntryBlockReason(safety);
   if (blocked) return Response.json({ ok: true, blocked: true, safety, runningBots: bots.length, message: blocked });
 
   const snapshot = await accountSnapshot();

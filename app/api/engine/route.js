@@ -1,5 +1,6 @@
 import { authorizedUser, isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
 import { primaryPaperOwnerKey, userScopeKey } from '../../../lib/user-scope.js';
+import { paperSafetyState } from '../../../lib/paper-safety.js';
 import { aiConfigured, requestStructured } from '../../../lib/ai.js';
 import { evaluateRisk } from '../../../lib/risk.js';
 import { createClient } from '@supabase/supabase-js';
@@ -113,6 +114,7 @@ function statusPayload(snapshot = { account: null, positions: [] }, options = {}
   const paperAccountAccess = options.paperAccountAccess !== false;
   const equity = snapshot.account?.equity || Number(process.env.CHALLENGE_START || 100);
   const guard = limits(equity);
+  const paperSafety = paperSafetyState();
   return {
     mode: liveTradingEnabled() ? 'live' : 'paper',
     account: paperAccountAccess ? (snapshot.account || { equity: Number(process.env.CHALLENGE_START || 100), cash: Number(process.env.CHALLENGE_START || 100), dayPnl: 0 }) : null,
@@ -132,9 +134,10 @@ function statusPayload(snapshot = { account: null, positions: [] }, options = {}
     },
     safety: {
       paperAccountAccess,
-      paperExecution: paperAccountAccess && process.env.PAPER_EXECUTION_ENABLED === 'true',
-      autoExecution: paperAccountAccess && process.env.AUTO_EXECUTION_ENABLED === 'true',
-      killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
+      phase4Armed: paperSafety.phase4Armed,
+      paperExecution: paperAccountAccess && paperSafety.paperExecution,
+      autoExecution: paperAccountAccess && paperSafety.autoExecution,
+      killSwitch: paperSafety.killSwitch,
       brokerConfigured: paperAccountAccess && Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
       aiConfigured: aiConfigured(),
       liveTrading: liveTradingEnabled(),

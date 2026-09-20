@@ -147,7 +147,19 @@ async function alpacaSnapshot() {
 async function stockDataProbe() {
   const data = await jsonFetch(`${DATA_BASE}/v2/stocks/SPY/bars?timeframe=5Min&limit=8&feed=iex&sort=asc`);
   const rows = Array.isArray(data?.bars) ? data.bars : [];
-  return { ok: rows.length >= 2, symbol: 'SPY', bars: rows.length, lastPrice: Number(rows.at(-1)?.c || 0) || null };
+  if (rows.length >= 2) {
+    return { ok: true, symbol: 'SPY', source: '5Min bars', bars: rows.length, lastPrice: Number(rows.at(-1)?.c || 0) || null };
+  }
+
+  const snapshot = await jsonFetch(`${DATA_BASE}/v2/stocks/SPY/snapshot?feed=iex`);
+  const price = Number(snapshot?.latestTrade?.p || snapshot?.minuteBar?.c || snapshot?.dailyBar?.c || snapshot?.prevDailyBar?.c || 0);
+  return {
+    ok: price > 0,
+    symbol: 'SPY',
+    source: 'snapshot/off-hours fallback',
+    bars: rows.length,
+    lastPrice: price || null,
+  };
 }
 
 async function cryptoDataProbe() {
