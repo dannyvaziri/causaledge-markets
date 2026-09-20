@@ -1,6 +1,8 @@
 name: Phase 4 production validation
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -9,17 +11,30 @@ jobs:
   validate-production:
     runs-on: ubuntu-latest
     steps:
-      - name: Run production read-only validator
+      - name: Wait for Hostinger and run production read-only validator
         env:
           SITE_URL: https://darkviolet-ibis-337737.hostingersite.com
           CRON_SECRET: ${{ secrets.CAUSALEDGE_CRON_SECRET }}
         run: |
           set -euo pipefail
           test -n "$CRON_SECRET"
-          response="$(curl --fail-with-body --silent --show-error \
-            --request GET "$SITE_URL/api/phase4/validate" \
-            --header "x-engine-secret: $CRON_SECRET")"
-          printf '%s\n' "$response"
-          echo "$response" | grep -q '"ok":true'
-          echo "$response" | grep -q '"orderPlaced":false'
-          echo "$response" | grep -q '"liveTradingEnabled":false'
+
+          for attempt in $(seq 1 20); do
+            echo "Phase 4 production validation attempt $attempt/20"
+            if response="$(curl --fail-with-body --silent --show-error \
+              --max-time 20 \
+              --request GET "$SITE_URL/api/phase4/validate" \
+              --header "x-engine-secret: $CRON_SECRET" 2>&1)"; then
+              printf '%s\n' "$response"
+              echo "$response" | grep -q '"ok":true'
+              echo "$response" | grep -q '"orderPlaced":false'
+              echo "$response" | grep -q '"liveTradingEnabled":false'
+              exit 0
+            fi
+
+            printf '%s\n' "$response"
+            if [ "$attempt" -lt 20 ]; then sleep 15; fi
+          done
+
+          echo "Production Phase 4 validation did not pass within the deployment window."
+          exit 1
