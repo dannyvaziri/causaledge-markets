@@ -1,5 +1,6 @@
 import { aiProvider } from '../../../lib/ai.js';
 import { auditConfigured } from '../../../lib/audit.js';
+import { brokerSecretsConfigured, brokerUsesDedicatedKey } from '../../../lib/broker-secrets.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,13 @@ export async function GET() {
   const brokerConfigured = liveTrading ? liveBrokerConfigured : paperBrokerConfigured;
   const aiConfigured = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
   const cronConfigured = Boolean(process.env.CRON_SECRET || process.env.ENGINE_SECRET);
+  const robinhoodAgenticReady = Boolean(authConfigured && auditConfigured() && brokerSecretsConfigured() && process.env.APP_URL && process.env.ROBINHOOD_CONNECTIONS_ENABLED !== 'false');
 
   return Response.json({
     ok: true,
     service: 'causaledge-markets',
     product: 'CausalEdge Markets',
+    release: 'phase3-user-robinhood-v1',
     mode: brokerConfigured ? (liveTrading ? 'alpaca-live' : 'alpaca-paper') : 'demo',
     liveTrading,
     configuration: {
@@ -29,6 +32,9 @@ export async function GET() {
       cronConfigured,
       appUrlConfigured: Boolean(process.env.APP_URL),
       auditConfigured: auditConfigured(),
+      robinhoodAgenticReady,
+      brokerTokenEncryptionDedicated: brokerUsesDedicatedKey(),
+      userScopedBots: true,
     },
     multiBotExecutionEnabled: process.env.MULTI_BOT_EXECUTION_ENABLED === 'true',
     paperExecutionEnabled: process.env.PAPER_EXECUTION_ENABLED === 'true',

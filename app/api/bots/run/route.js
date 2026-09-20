@@ -1,6 +1,7 @@
 import { isDashboardAuthorized, matchesSecret } from '../../../../lib/access.js';
 import { evaluateRisk } from '../../../../lib/risk.js';
 import { loadBotActivity, loadBots, sharedRiskLimits, writeBotEvent } from '../../../../lib/bots.js';
+import { primaryPaperOwnerKey } from '../../../../lib/user-scope.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,8 +115,8 @@ async function accountSnapshot() {
   return { account, equity, cash: Number(account.cash || 0), dayPnl: Number((equity - lastEquity).toFixed(2)), positions: positions || [] };
 }
 
-async function reconcileFills(bot) {
-  const activity = await loadBotActivity(bot.id, 120);
+async function reconcileFills(bot, ownerKey) {
+  const activity = await loadBotActivity(bot.id, ownerKey, 120);
   const filled = new Set(activity.filter((row) => row.event_type === 'BOT_FILL').map((row) => row.order_id).filter(Boolean));
   const pending = activity.filter((row) => ['BOT_ORDER', 'BOT_EXIT'].includes(row.event_type) && row.order_id && !filled.has(row.order_id)).slice(0, 12);
   for (const row of pending) {
@@ -123,6 +124,7 @@ async function reconcileFills(bot) {
       const order = await jsonFetch(`${PAPER_BASE}/v2/orders/${encodeURIComponent(row.order_id)}`);
       if (order?.status !== 'filled') continue;
       await writeBotEvent({
+        ownerKey,
         botId: bot.id,
         eventType: 'BOT_FILL',
         status: 'FILLED',
@@ -134,7 +136,7 @@ async function reconcileFills(bot) {
       });
     } catch {}
   }
-  return loadBotActivity(bot.id, 120);
+  return loadBotActivity(bot.id, ownerKey, 120);
 }
 
 function ownedQty(activity) {
@@ -144,15 +146,18 @@ function ownedQty(activity) {
   }, 0));
 }
 
-async function audit(bot, eventType, status, message, metadata = {}) {
-  return writeBotEvent({ botId: bot.id, eventType, status, symbol: bot.symbol, message, metadata });
+async function audit(ownerKey, bot, eventType, status, message, metadata = {}) {
+  return writeBotEvent({ ownerKey, botId: bot.id, eventType, status, symbol: bot.symbol, message, metadata });
 }
 
 export async function POST(request) {
   if (!authorized(request)) return Response.json({ error: 'Invalid engine access token.' }, { status: 401 });
   if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) return Response.json({ error: 'Alpaca paper credentials are not configured.' }, { status: 400 });
 
-  const bots = (await loadBots()).filter((bot) => bot.status === 'running');
+  const ownerKey = primaryPaperOwnerKey();
+  if (!ownerKey) return Response.json({ error: 'PAPER_ACCOUNT_OWNER_EMAIL or ALLOWED_GOOGLE_EMAILS must identify the paper-account owner.' }, { status: 503 });
+
+  const bots = (await loadBots(ownerKey)).filter((bot) => bot.status === 'running');
   const safety = safetyState();
   const blocked = entryBlockReason(safety);
   if (blocked) return Response.json({ ok: true, blocked: true, safety, runningBots: bots.length, message: blocked });
@@ -167,19 +172,19 @@ export async function POST(request) {
     try {
       const key = keyFor(bot.symbol);
       if (claimedSymbols.has(key)) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', 'Another running bot already owns this symbol for the current cycle. Duplicate active symbols are blocked.');
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', 'Another running bot already owns this symbol for the current cycle. Duplicate active symbols are blocked.');
         results.push({ botId: bot.id, action: 'REJECT', reason: 'duplicate active symbol' });
         continue;
       }
       claimedSymbols.add(key);
 
       if (dailyLossUsd >= Math.min(shared.maxDailyLossUsd, bot.maxDailyLossUsd)) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', `Daily account loss of $${dailyLossUsd.toFixed(2)} reached this bot's $${bot.maxDailyLossUsd.toFixed(2)} limit.`);
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', `Daily account loss of $${dailyLossUsd.toFixed(2)} reached this bot's $${bot.maxDailyLossUsd.toFixed(2)} limit.`);
         results.push({ botId: bot.id, action: 'REJECT', reason: 'daily loss limit' });
         continue;
       }
 
-      const activity = await reconcileFills(bot);
+      const activity = await reconcileFills(bot, ownerKey);
       const botQty = ownedQty(activity);
       const position = snapshot.positions.find((item) => keyFor(item.symbol) === key);
 
@@ -190,24 +195,24 @@ export async function POST(request) {
           const qty = Math.min(botQty, Math.max(Number(position.qty || 0), 0));
           if (qty > 0) {
             const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, { method: 'POST', body: JSON.stringify({ symbol: bot.symbol, side: 'sell', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', qty: String(qty), client_order_id: `ce-${bot.id.slice(0, 8)}-exit-${Date.now()}`.slice(0, 48) }) });
-            await writeBotEvent({ botId: bot.id, eventType: 'BOT_EXIT', status: 'ACCEPTED', symbol: bot.symbol, side: 'SELL', orderId: order.id, message: `${exitReason}; submitted a paper exit for ${qty} ${bot.symbol}.`, metadata: { qty, unrealizedPlpc: plpc } });
+            await writeBotEvent({ ownerKey, botId: bot.id, eventType: 'BOT_EXIT', status: 'ACCEPTED', symbol: bot.symbol, side: 'SELL', orderId: order.id, message: `${exitReason}; submitted a paper exit for ${qty} ${bot.symbol}.`, metadata: { qty, unrealizedPlpc: plpc } });
             results.push({ botId: bot.id, action: 'EXIT', orderId: order.id });
             continue;
           }
         }
-        await audit(bot, 'BOT_DECISION', 'HOLD', `Holding the bot-owned ${bot.symbol} position. Unrealized movement is ${plpc.toFixed(2)}%; exit limits are -${bot.stopLossPct}% / +${bot.takeProfitPct}%.`, { unrealizedPlpc: plpc });
+        await audit(ownerKey, bot, 'BOT_DECISION', 'HOLD', `Holding the bot-owned ${bot.symbol} position. Unrealized movement is ${plpc.toFixed(2)}%; exit limits are -${bot.stopLossPct}% / +${bot.takeProfitPct}%.`, { unrealizedPlpc: plpc });
         results.push({ botId: bot.id, action: 'HOLD', reason: 'position open' });
         continue;
       }
 
       if (position && botQty <= 0) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', 'A broker position already exists for this symbol but was not opened by this bot. The bot will not take ownership of a manual or other-bot position.');
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', 'A broker position already exists for this symbol but was not opened by this bot. The bot will not take ownership of a manual or other-bot position.');
         results.push({ botId: bot.id, action: 'REJECT', reason: 'unowned existing position' });
         continue;
       }
 
       if (snapshot.positions.length >= shared.maxOpenPositions) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', `Shared account limit of ${shared.maxOpenPositions} open positions is already reached.`);
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', `Shared account limit of ${shared.maxOpenPositions} open positions is already reached.`);
         results.push({ botId: bot.id, action: 'REJECT', reason: 'shared position limit' });
         continue;
       }
@@ -215,7 +220,7 @@ export async function POST(request) {
       const exposure = snapshot.positions.reduce((sum, item) => sum + Math.abs(Number(item.market_value || 0)), 0);
       const projectedExposurePct = snapshot.equity > 0 ? ((exposure + bot.tradeAmount) / snapshot.equity) * 100 : 100;
       if (projectedExposurePct > shared.maxAggregateExposurePct) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', `Shared bot exposure would exceed ${shared.maxAggregateExposurePct}% of paper equity.`);
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', `Shared bot exposure would exceed ${shared.maxAggregateExposurePct}% of paper equity.`);
         results.push({ botId: bot.id, action: 'REJECT', reason: 'shared exposure limit' });
         continue;
       }
@@ -223,7 +228,7 @@ export async function POST(request) {
       const series = await barsFor(bot);
       const signal = signalFor(bot, series);
       if (signal.action !== 'BUY') {
-        await audit(bot, 'BOT_DECISION', 'HOLD', signal.reason, { strategy: bot.strategy, score: signal.score, lastPrice: series.at(-1)?.close || null });
+        await audit(ownerKey, bot, 'BOT_DECISION', 'HOLD', signal.reason, { strategy: bot.strategy, score: signal.score, lastPrice: series.at(-1)?.close || null });
         results.push({ botId: bot.id, action: 'HOLD', reason: signal.reason });
         continue;
       }
@@ -256,16 +261,16 @@ export async function POST(request) {
         },
       });
       if (!risk.approved) {
-        await audit(bot, 'BOT_REJECT', 'REJECTED', risk.reasons.join(' '), { strategy: bot.strategy, risk: risk.reasons });
+        await audit(ownerKey, bot, 'BOT_REJECT', 'REJECTED', risk.reasons.join(' '), { strategy: bot.strategy, risk: risk.reasons });
         results.push({ botId: bot.id, action: 'REJECT', reason: risk.reasons.join(' ') });
         continue;
       }
 
       const order = await jsonFetch(`${PAPER_BASE}/v2/orders`, { method: 'POST', body: JSON.stringify({ symbol: bot.symbol, side: 'buy', type: 'market', time_in_force: bot.assetType === 'crypto' ? 'gtc' : 'day', notional: String(notional), client_order_id: `ce-${bot.id.slice(0, 8)}-buy-${Date.now()}`.slice(0, 48) }) });
-      await writeBotEvent({ botId: bot.id, eventType: 'BOT_ORDER', status: 'ACCEPTED', symbol: bot.symbol, side: 'BUY', orderId: order.id, message: `${bot.strategy} signal passed shared risk checks; submitted a $${notional.toFixed(2)} paper buy.`, metadata: { notional, strategy: bot.strategy, signal } });
+      await writeBotEvent({ ownerKey, botId: bot.id, eventType: 'BOT_ORDER', status: 'ACCEPTED', symbol: bot.symbol, side: 'BUY', orderId: order.id, message: `${bot.strategy} signal passed shared risk checks; submitted a $${notional.toFixed(2)} paper buy.`, metadata: { notional, strategy: bot.strategy, signal } });
       results.push({ botId: bot.id, action: 'BUY', orderId: order.id, notional });
     } catch (error) {
-      await audit(bot, 'BOT_REJECT', 'ERROR', String(error?.message || error)).catch(() => null);
+      await audit(ownerKey, bot, 'BOT_REJECT', 'ERROR', String(error?.message || error)).catch(() => null);
       results.push({ botId: bot.id, action: 'ERROR', reason: String(error?.message || error) });
     }
   }

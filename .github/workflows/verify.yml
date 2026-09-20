@@ -30,10 +30,12 @@ jobs:
           ALLOWED_GOOGLE_EMAILS=
           ENGINE_SECRET=
           CRON_SECRET=
+          PAPER_ACCOUNT_OWNER_EMAIL=
           CHALLENGE_START=100
           CHALLENGE_TARGET=1000
           CHALLENGE_WATCHLIST=AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,JPM,SPY
           MULTI_BOT_EXECUTION_ENABLED=false
+          LEGACY_ENGINE_EXECUTION_ENABLED=false
           PAPER_EXECUTION_ENABLED=false
           AUTO_EXECUTION_ENABLED=false
           TRADING_KILL_SWITCH=true
@@ -48,6 +50,17 @@ jobs:
           OPENAI_MODEL=gpt-5.4-mini
           LIVE_ALPACA_API_KEY=
           LIVE_ALPACA_API_SECRET=
+          ROBINHOOD_CONNECTIONS_ENABLED=true
+          ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading
+          ROBINHOOD_MCP_SCOPES=
+          ROBINHOOD_MCP_CLIENT_ID=
+          ROBINHOOD_MCP_CLIENT_SECRET=
+          ROBINHOOD_MCP_TOKEN_AUTH_METHOD=
+          BROKER_TOKEN_ENCRYPTION_KEY=
+          SUPABASE_URL=
+          SUPABASE_ANON_KEY=
+          SUPABASE_API_KEY=
+          SUPABASE_SERVICE_ROLE_KEY=
           EOF
       - name: Package Hostinger upload
         if: github.event_name == 'push'
