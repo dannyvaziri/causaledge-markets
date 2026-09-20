@@ -1,0 +1,38 @@
+name: Phase 4 controlled paper order test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  paper-round-trip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Hostinger and run one idempotent paper round-trip
+        env:
+          SITE_URL: https://darkviolet-ibis-337737.hostingersite.com
+          CRON_SECRET: ${{ secrets.CAUSALEDGE_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$CRON_SECRET"
+
+          for attempt in $(seq 1 20); do
+            echo "Controlled Phase 4 paper-order attempt $attempt/20"
+            if response="$(curl --fail-with-body --silent --show-error \
+              --max-time 35 \
+              --request POST "$SITE_URL/api/phase4/order-test" \
+              --header "x-engine-secret: $CRON_SECRET" 2>&1)"; then
+              printf '%s\n' "$response"
+              echo "$response" | grep -q '"ok":true'
+              echo "$response" | grep -q '"orderTestComplete":true'
+              echo "$response" | grep -q '"liveTradingEnabled":false'
+              exit 0
+            fi
+
+            printf '%s\n' "$response"
+            if [ "$attempt" -lt 20 ]; then sleep 15; fi
+          done
+
+          echo "Controlled Phase 4 paper-order test did not complete within the deployment window."
+          exit 1
