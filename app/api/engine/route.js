@@ -1,4 +1,5 @@
-import { isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
+import { authorizedUser, isDashboardAuthorized, matchesSecret } from '../../../lib/access.js';
+import { primaryPaperOwnerKey, userScopeKey } from '../../../lib/user-scope.js';
 import { aiConfigured, requestStructured } from '../../../lib/ai.js';
 import { evaluateRisk } from '../../../lib/risk.js';
 import { createClient } from '@supabase/supabase-js';
@@ -106,13 +107,14 @@ async function accountSnapshot() {
   };
 }
 
-function statusPayload(snapshot = { account: null, positions: [] }) {
+function statusPayload(snapshot = { account: null, positions: [] }, options = {}) {
+  const paperAccountAccess = options.paperAccountAccess !== false;
   const equity = snapshot.account?.equity || Number(process.env.CHALLENGE_START || 100);
   const guard = limits(equity);
   return {
     mode: liveTradingEnabled() ? 'live' : 'paper',
-    account: snapshot.account || { equity: Number(process.env.CHALLENGE_START || 100), cash: Number(process.env.CHALLENGE_START || 100), dayPnl: 0 },
-    positions: snapshot.positions || [],
+    account: paperAccountAccess ? (snapshot.account || { equity: Number(process.env.CHALLENGE_START || 100), cash: Number(process.env.CHALLENGE_START || 100), dayPnl: 0 }) : null,
+    positions: paperAccountAccess ? (snapshot.positions || []) : [],
     challenge: {
       start: Number(process.env.CHALLENGE_START || 100),
       target: Number(process.env.CHALLENGE_TARGET || 1000),
@@ -127,14 +129,15 @@ function statusPayload(snapshot = { account: null, positions: [] }) {
       lastRun: runtime.lastRun,
     },
     safety: {
-      paperExecution: process.env.PAPER_EXECUTION_ENABLED === 'true',
-      autoExecution: process.env.AUTO_EXECUTION_ENABLED === 'true',
+      paperAccountAccess,
+      paperExecution: paperAccountAccess && process.env.PAPER_EXECUTION_ENABLED === 'true',
+      autoExecution: paperAccountAccess && process.env.AUTO_EXECUTION_ENABLED === 'true',
       killSwitch: process.env.TRADING_KILL_SWITCH === 'true',
-      brokerConfigured: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
+      brokerConfigured: paperAccountAccess && Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
       aiConfigured: aiConfigured(),
       liveTrading: liveTradingEnabled(),
     },
-    logs: runtime.logs,
+    logs: paperAccountAccess ? runtime.logs : [],
   };
 }
 
@@ -263,8 +266,12 @@ async function runCycle() {
 
 export async function GET(request) {
   if (!isDashboardAuthorized(request)) return Response.json({ error: 'Sign in to access your dashboard.' }, { status: 401 });
-  try { return Response.json(statusPayload(await accountSnapshot())); }
-  catch (error) { return Response.json({ ...statusPayload(), error: String(error?.message || error) }, { status: 502 }); }
+  const user = authorizedUser(request);
+  if (!user) return Response.json({ error: 'A signed-in user is required.' }, { status: 401 });
+  const paperAccountAccess = userScopeKey(user) === primaryPaperOwnerKey();
+  if (!paperAccountAccess) return Response.json(statusPayload({ account: null, positions: [] }, { paperAccountAccess: false }));
+  try { return Response.json(statusPayload(await accountSnapshot(), { paperAccountAccess: true })); }
+  catch (error) { return Response.json({ ...statusPayload(undefined, { paperAccountAccess: true }), error: String(error?.message || error) }, { status: 502 }); }
 }
 
 export async function POST(request) {
