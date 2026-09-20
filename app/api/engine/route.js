@@ -74,9 +74,11 @@ function limits(equity) {
 }
 
 function isEngineAuthorized(request) {
-  if (isDashboardAuthorized(request)) return true;
   const configured = process.env.CRON_SECRET || process.env.ENGINE_SECRET || '';
-  return matchesSecret(request.headers.get('x-engine-secret'), configured);
+  if (matchesSecret(request.headers.get('x-engine-secret'), configured)) return true;
+  if (!isDashboardAuthorized(request)) return false;
+  const user = authorizedUser(request);
+  return Boolean(user && userScopeKey(user) === primaryPaperOwnerKey());
 }
 
 async function accountSnapshot() {
@@ -136,6 +138,7 @@ function statusPayload(snapshot = { account: null, positions: [] }, options = {}
       brokerConfigured: paperAccountAccess && Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
       aiConfigured: aiConfigured(),
       liveTrading: liveTradingEnabled(),
+      legacyEngineExecution: process.env.LEGACY_ENGINE_EXECUTION_ENABLED === 'true',
     },
     logs: paperAccountAccess ? runtime.logs : [],
   };
@@ -204,6 +207,7 @@ async function closeAll() {
 
 async function runCycle() {
   runtime.lastRun = now();
+  if (process.env.LEGACY_ENGINE_EXECUTION_ENABLED !== 'true') { log('REJECT', 'Legacy single-bot execution is retired; use the multi-bot workspace.'); return accountSnapshot(); }
   if (runtime.paused) { log('SYSTEM', 'Cycle skipped because the engine is paused.'); return accountSnapshot(); }
   if (process.env.TRADING_KILL_SWITCH === 'true') { log('REJECT', 'Cycle blocked by the global kill switch.'); return accountSnapshot(); }
   if (!liveTradingEnabled() && (process.env.PAPER_EXECUTION_ENABLED !== 'true' || process.env.AUTO_EXECUTION_ENABLED !== 'true')) {
