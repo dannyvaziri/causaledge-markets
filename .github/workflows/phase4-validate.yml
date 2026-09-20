@@ -16,9 +16,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CRON_SECRET"
-          response="$(curl --fail-with-body --silent --show-error             --request GET "$SITE_URL/api/phase4/validate"             --header "x-engine-secret: $CRON_SECRET")"
-          printf '%s
-' "$response"
+          response="$(curl --fail-with-body --silent --show-error \
+            --request GET "$SITE_URL/api/phase4/validate" \
+            --header "x-engine-secret: $CRON_SECRET")"
+          printf '%s\n' "$response"
           echo "$response" | grep -q '"ok":true'
           echo "$response" | grep -q '"orderPlaced":false'
           echo "$response" | grep -q '"liveTradingEnabled":false'
